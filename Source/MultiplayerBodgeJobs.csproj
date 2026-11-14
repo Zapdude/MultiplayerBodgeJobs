@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <AssemblyName>MultiplayerBodgeJobs</AssemblyName>
+    <RootNamespace>MultiplayerBodgeJobs</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <OutputPath>bin</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <DebugType>none</DebugType>
+    <Optimize>true</Optimize>
+    <NoWarn>CS0649;CS0169</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="Assembly-CSharp">
+      <HintPath>c:\program files (x86)\steam\steamapps\common\RimWorld\RimWorldWin64_Data\Managed\Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>c:\program files (x86)\steam\steamapps\common\RimWorld\RimWorldWin64_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>c:\program files (x86)\steam\steamapps\workshop\content\294100\2009463077\1.6\Assemblies\0Harmony.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="0MultiplayerAPI">
+      <HintPath>c:\program files (x86)\steam\steamapps\workshop\content\294100\2606448745\1.6\Assemblies\0MultiplayerAPI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="PersonaWeaponsUnbound">
+      <HintPath>c:\program files (x86)\steam\steamapps\workshop\content\294100\3766728761\1.6\Assemblies\PersonaWeaponsUnbound.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UniqueWeaponsUnbound">
+      <HintPath>c:\program files (x86)\steam\steamapps\workshop\content\294100\3707263149\1.6\Assemblies\UniqueWeaponsUnbound.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>
