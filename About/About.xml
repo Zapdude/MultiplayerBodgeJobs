@@ -4,9 +4,9 @@
   <author>Zapdude</author>
   <packageId>zap.multiplayerbodgejobs</packageId>
   <modVersion>1.0</modVersion>
-  <description>Bodge jobs for this mod list. Each job is independent and disables itself with a log warning if the Multiplayer build it targets is not the one it was written against.
+  <description>A collection of "bodged" patches for MP that are like 50% me and 50% a robot. Check the commit history and see the first about.xml it slimed out while I wasn't looking.
 
-Unbound weapon customization sync. Persona Weapons Unbound and Unique Weapons Unbound start the customize job through Pawn_JobTracker.TryTakeOrderedJob, which Multiplayer already syncs. The desync is the second half: the dialog commits the chosen spec by calling JobDriver_CustomizeWeapon.SetSpec on the already-running driver, and that call only happens on the client that pressed Confirm. Every other client then runs the job with a null spec and bails. This patch routes the commit through a registered sync method so all clients set the same spec.</description>
+Check the provided file to read specific mods targeted and why. It's unlikely more than 3 people will ever use this, and yet I made a git repo anyway... why?!</description>
   <supportedVersions>
     <li>1.6</li>
   </supportedVersions>
