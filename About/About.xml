@@ -18,16 +18,18 @@ Check the provided file to read specific mods targeted and why. It's unlikely mo
       <downloadUrl>https://github.com/pardeike/HarmonyRimWorld/releases/latest</downloadUrl>
     </li>
     <li>
-      <packageId>rwmt.Multiplayer</packageId>
-      <displayName>Multiplayer</displayName>
-      <steamWorkshopUrl>steam://url/CommunityFilePage/2606448745</steamWorkshopUrl>
-      <downloadUrl>https://github.com/rwmt/Multiplayer/releases</downloadUrl>
+      <packageId>zap.multiplayerbodged</packageId>
+      <displayName>Multiplayer Bodged</displayName>
+      <downloadUrl>https://github.com/Zapdude/Multiplayer/releases</downloadUrl>
     </li>
   </modDependencies>
   <loadAfter>
     <li>brrainz.harmony</li>
-    <li>rwmt.Multiplayer</li>
+    <li>zap.multiplayerbodged</li>
     <li>shunter.personaweaponsunbound</li>
     <li>shunter.uniqueweaponsunbound</li>
   </loadAfter>
+  <loadBefore>
+    <li>rwmt.MultiplayerCompatibility</li>
+  </loadBefore>
 </ModMetaData>
