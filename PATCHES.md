@@ -55,3 +55,32 @@ Confirm. Check `Player.log` for a missing `SetSpec` warning after a mod update.
   `zap.multiplayerbodged` because this fork runs against the Multiplayer Bodged build.
 - This branch does not carry the old Bodge Jobs entry points (`MultiplayerBodgeJobsMod`,
   `SkipObsoleteVcefCompat`).
+
+## Requires a newer Multiplayer than the 1.7 fork had
+
+`Source_Referenced/VanillaGravshipExpanded.cs` reflects on three Multiplayer types:
+
+- `Multiplayer.Client.Patches.GravshipCutsceneSync.HasPendingTakeoff`
+- `Multiplayer.Client.Persistent.GravshipMapDecisions.HandleDialog` / `.WasManaged`
+- `Multiplayer.Client.Persistent.GravshipUiOwnership.LandingPresentationAllowed` /
+  `.SetLandingMarkerFromUi`
+
+The 1.7 Multiplayer fork (`Multiplayer-fork`, branch `experimental-1.7`) lacked them, and the module
+throws when a contract is missing, which aborted every VGE sync registration after it. Those types
+were recovered from the 1.7 Multiplayer build (workshop `3820003322`) and ported into that branch as
+commit `ab47b9e`. Without a Multiplayer build that carries them, the whole `vanillaexpanded.gravship`
+module logs `MPCompat :: Exception loading vanillaexpanded.gravship` and does nothing.
+
+Not ported, because this module does not use them: `GravshipFlightPreparation` and the ritual-dialog
+guards from the same build.
+
+## Not built: the Chapter 2 body module
+
+The temporary 1.7 build also ships `Referenced/Multiplayer_Gravship2Overrides.dll`. The loader
+requires it when `vanillaexpanded.gravship2` is loaded and throws `FileNotFoundException` otherwise,
+which aborts compat initialisation entirely. The file is 25 classes in
+`Multiplayer.Compat.Workshop17.Bodies`, each replacing one VGE2 method body with a deterministic
+version, applied by `Source/VanillaGravshipExpanded2Workshop.cs` from an embedded
+`Workshop17.replacements.txt` manifest. Building it needs a `Source_Referenced/Gravship2` project
+compiled against `VanillaGravshipExpanded2.dll` (installed, workshop `3799737423`) plus that manifest
+extracted from the shipped assembly. Until then, Chapter 2 players hit the missing-file throw.
