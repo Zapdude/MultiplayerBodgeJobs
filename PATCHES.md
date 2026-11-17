@@ -80,4 +80,7 @@ Jobs mod is removed, so this replaces it rather than stacking with it.
   `zap.multiplayerbodged` because this fork runs against the Multiplayer Bodged build.
 - `main` removes the old Bodge Jobs entry points (`MultiplayerBodgeJobsMod`,
   `SkipObsoleteVcefCompat`) now that the Unbound patch and the VCEF fix live in the compat modules.
-- The `Referenced` assembly and its modules are not part of this fork yet on either branch.
+- The `Referenced` assembly is built on the 1.7 branch (`Source_Referenced/`, five modules). Its
+  `VanillaFactionsClassical` and `VanillaFactionsDeserters` modules are excluded until those mods
+  have 1.7 builds. On `main` the Referenced project and its `References/` folder are still not
+  carried.
