@@ -1,8 +1,9 @@
 # Multiplayer Compatibility, 1.6 (Bodge Jobs fork)
 
 A RimWorld 1.6 fork of [Multiplayer Compatibility](https://github.com/rwmt/Multiplayer-Compatibility),
-maintained as the `main` branch of the Multiplayer Bodge Jobs repository. The mod keeps the upstream
-package id so existing saves, plans and dependencies resolve to it.
+maintained as the `main` branch of the Multiplayer Bodge Jobs repository. This fork uses its own
+package id, `zap.multiplayerbodgejobs`, so disable the original Multiplayer Compatibility if you use
+it; the game will not warn about the duplicate.
 
 This branch is the upstream 1.6 source with the fork's changes on top. `PATCHES.md` lists them, their
 upstream status and their test plans. `NOTICE.md` records provenance.

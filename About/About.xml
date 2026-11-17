@@ -1,14 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ModMetaData>
-  <packageId>rwmt.MultiplayerCompatibility</packageId>
-  <name>Multiplayer Compatibility (Bodge Jobs)</name>
-  <author>RimWorld Multiplayer Team; fork by Zapdude</author>
+  <packageId>zap.multiplayerbodgejobs</packageId>
+  <name>Multiplayer Bodge Jobs</name>
+  <author>Zapdude; based on Multiplayer Compatibility by the RimWorld Multiplayer Team</author>
   <url>https://github.com/Zapdude/MultiplayerBodgeJobs</url>
   <modVersion>1.6.0</modVersion>
   <supportedVersions>
     <li>1.6</li>
   </supportedVersions>
-  <description>Fork of Multiplayer Compatibility for RimWorld 1.6, maintained in the Multiplayer Bodge Jobs repository. The project is MIT licensed; PATCHES.md lists the fork's changes and their upstream status, NOTICE.md records provenance.
+  <description>Multiplayer Bodge Jobs: a fork of Multiplayer Compatibility for RimWorld 1.6. The project is MIT licensed; PATCHES.md lists the fork's changes and their upstream status, NOTICE.md records provenance.
+
+Do not enable this together with the original Multiplayer Compatibility. This fork carries its own package id, so the game will not stop you.
 
 Requires Multiplayer Bodged, the fork of Multiplayer.
 
