@@ -23,5 +23,9 @@ decompiler output.
 
 ## What is not included
 
-The `Referenced` assembly and the `References/` third-party assemblies upstream uses to build it.
-Its modules are not part of this fork yet.
+The `References/` third-party assemblies upstream copies into the build; the `Source_Referenced`
+project references the installed workshop assemblies instead. `Source_Referenced/` itself is carried
+on this branch: it was decompiled from the 1.6 `Referenced/Multiplayer_Compat_Referenced.dll` shipped
+in workshop item 1629973374 with ILSpy 11.2.0.10050 against the RimWorld 1.6 reference assemblies.
+The modules whose mod is not installed at 1.6 stay in the tree but are excluded from the build (see
+`README.md`).

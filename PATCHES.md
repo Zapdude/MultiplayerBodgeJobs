@@ -76,7 +76,10 @@ Jobs mod is removed, so this replaces it rather than stacking with it.
 - `About/About.xml` uses the fork's own package id, `zap.multiplayerbodgejobs`, so the original
   Multiplayer Compatibility has to be disabled when this is enabled. It depends on
   `zap.multiplayerbodged` because this fork runs against the Multiplayer Bodged build.
-- This branch does not carry the `Referenced` project or its `References/` folder; that second
-  assembly is built on the 1.7 branch only.
+- `Source_Referenced/` compiles to `Referenced/Multiplayer_Compat_Referenced.dll` from the 1.6
+  assembly upstream ships in workshop item 1629973374. It builds `AlteredCarbon`, `HemogenExtractor`,
+  `VanillaExpandedFrameworkReferenced`, `VanillaFactionsClassical`, `VanillaFactionsDeserters`,
+  `VanillaFactionsEmpire` and `VanillaGravshipExpanded`; the remaining modules stay in the tree but
+  are excluded because their mods are not installed at 1.6.
 - This branch does not carry the old Bodge Jobs entry points (`MultiplayerBodgeJobsMod`,
   `SkipObsoleteVcefCompat`).

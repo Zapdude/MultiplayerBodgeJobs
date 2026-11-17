@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- RimWorld 1.6 runs on .NET Framework 4.8; same target as Source/Multiplayer_Compat.csproj. -->
+    <TargetFramework>net48</TargetFramework>
+    <AssemblyName>Multiplayer_Compat_Referenced</AssemblyName>
+    <RootNamespace>Multiplayer.Compat</RootNamespace>
+    <LangVersion>12</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
+    <PublicizeAsReferenceAssemblies>false</PublicizeAsReferenceAssemblies>
+    <OutputPath>..\Referenced\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+    <DebugType>none</DebugType>
+    <Optimize>true</Optimize>
+    <NoWarn>CS0108;CS0114;CS0162;CS0168;CS0169;CS0219;CS0414;CS0649;CS0618;CS0672;CS0809;CS8632;CS9113;CS0436</NoWarn>
+
+    <!-- Steam workshop root. Override on the command line if the library lives elsewhere. -->
+    <WorkshopDir Condition="'$(WorkshopDir)' == ''">c:\program files (x86)\steam\steamapps\workshop\content\294100</WorkshopDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Krafs.Rimworld.Ref" Version="1.6.*" ExcludeAssets="runtime" />
+    <PackageReference Include="Krafs.Publicizer" Version="2.3.*" PrivateAssets="all" />
+    <PackageReference Include="Lib.Harmony" Version="2.3.6" ExcludeAssets="runtime" />
+    <PackageReference Include="RimWorld.MultiplayerAPI" Version="0.6.0" ExcludeAssets="runtime" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="Multiplayer_Compat">
+      <HintPath>..\Assemblies\Multiplayer_Compat.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- Build the main project first; the reference above points at its output. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Source\Multiplayer_Compat.csproj" ReferenceOutputAssembly="false" Private="false" />
+  </ItemGroup>
+
+  <!--
+    Compile-time references to the mods whose types the modules use directly. The publicizer is
+    applied to them as well because the code reads non-public members.
+
+    2196278117  Altered Carbon
+    2023507013  Vanilla Expanded Framework (ships PipeSystem and Outposts)
+    2787850474  Vanilla Factions Expanded - Classical
+    3025493377  Vanilla Factions Expanded - Deserters
+    2938820380  Vanilla Factions Expanded - Empire
+    3609835606  Vanilla Gravship Expanded
+  -->
+  <ItemGroup>
+    <Reference Include="AlteredCarbon">
+      <HintPath>$(WorkshopDir)\2196278117\1.6\Assemblies\AlteredCarbon.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="PipeSystem">
+      <HintPath>$(WorkshopDir)\2023507013\1.6\Assemblies\PipeSystem.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Outposts">
+      <HintPath>$(WorkshopDir)\2023507013\1.6\Assemblies\Outposts.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="VFEC">
+      <HintPath>$(WorkshopDir)\2787850474\1.6\Assemblies\VFEC.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="VFED">
+      <HintPath>$(WorkshopDir)\3025493377\1.6\Assemblies\VFED.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="VFEEmpire">
+      <HintPath>$(WorkshopDir)\2938820380\1.6\Assemblies\VFEEmpire.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="VanillaGravshipExpanded">
+      <HintPath>$(WorkshopDir)\3609835606\1.6\Assemblies\VanillaGravshipExpanded.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Publicize Include="Assembly-CSharp;AlteredCarbon;PipeSystem;Outposts;VFEC;VFED;VFEEmpire;VanillaGravshipExpanded" />
+  </ItemGroup>
+
+  <!--
+    Modules whose mod has no installed 1.6 build. Their sources stay here so the patches are
+    readable; remove the matching Compile Remove line, add a Reference to the assembly named in
+    the comment (and publicize it) when the mod is installed.
+  -->
+  <ItemGroup>
+    <!-- TorannMagic and AbilityUser are not installed. -->
+    <Compile Remove="Multiplayer.Compat\ARimWorldOfMagic.cs" />
+    <!-- CashRegister.dll is not installed. -->
+    <Compile Remove="Multiplayer.Compat\CashRegister.cs" />
+    <!-- EccentricDefenseGrid.dll is not installed. -->
+    <Compile Remove="Multiplayer.Compat\EccentricTechDefenseGrid.cs" />
+    <!-- Gastronomy.dll is not installed. -->
+    <Compile Remove="Multiplayer.Compat\Gastronomy.cs" />
+    <!-- Storefront.dll is not installed. -->
+    <Compile Remove="Multiplayer.Compat\Storefront.cs" />
+    <!-- Vehicles.dll and SmashTools.dll are not installed. -->
+    <Compile Remove="Multiplayer.Compat\VehicleFramework.cs" />
+    <!-- ZombieLand.dll is not installed. -->
+    <Compile Remove="Multiplayer.Compat\ZombieLand.cs" />
+    <Compile Remove="Multiplayer.Compat\ZombieLandMpComponent.cs" />
+    <!--
+      Compiler-generated delegate used only by ARimWorldOfMagic (which is excluded). Its decompiled
+      form carries an optional generic parameter that C# rejects, so it stays out of the build.
+    -->
+    <Compile Remove="--f__AnonymousDelegate0.cs" />
+  </ItemGroup>
+
+</Project>
