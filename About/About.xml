@@ -1,22 +1,84 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ModMetaData>
-  <name>Multiplayer Bodge Jobs</name>
-  <author>Zapdude</author>
-  <packageId>zap.multiplayerbodgejobs</packageId>
-  <modVersion>1.0</modVersion>
-  <description>A collection of "bodged" patches for MP that are like 50% me and 50% a robot. Check the commit history and see the first about.xml it slimed out while I wasn't looking.
-
-Check the provided file to read specific mods targeted and why. It's unlikely more than 3 people will ever use this, and yet I made a git repo anyway... why?!</description>
+  <packageId>rwmt.MultiplayerCompatibility</packageId>
+  <name>Multiplayer Compatibility (Bodge Jobs)</name>
+  <author>RimWorld Multiplayer Team; fork by Zapdude</author>
+  <url>https://github.com/Zapdude/MultiplayerBodgeJobs</url>
+  <modVersion>1.6.0</modVersion>
   <supportedVersions>
     <li>1.6</li>
   </supportedVersions>
+  <description>Fork of Multiplayer Compatibility for RimWorld 1.6, maintained in the Multiplayer Bodge Jobs repository. The project is MIT licensed; PATCHES.md lists the fork's changes and their upstream status, NOTICE.md records provenance.
+
+Requires Multiplayer Bodged, the fork of Multiplayer.
+
+Adds sync for the customization commit of Persona Weapons Unbound and Unique Weapons Unbound, and guards the Vanilla Fishing Expanded handler against the Odyssey build.
+
+Mod Support:
+    - [KV] RimFridge
+    - [KV] Path Avoid
+    - [O21] Clutter Structures
+    - Alpha Animals
+    - Alpha Biomes
+    - Animals Logic
+    - Avoid Friendly Fire
+    - Choice of Psycasts
+    - Cleaning Area
+    - Common Sense
+    - Corruption Core
+    - Corruption Psykers
+    - Corruption - Worship
+    - Cut Plants Before Building
+    - Desynchronized: Tales and News (Continued)
+    - Dragon's Descent
+    - Fertile Fields
+    - Gastronomy
+    - Genetic Rim
+    - Immortals
+    - LWM's Deep Storage
+    - MinifyEverything
+    - Misc. Robots
+    - Misc. Training
+    - Netrve's DeepStorage GUI
+    - Pocket Sand
+    - PowerSwitch
+    - Prison Labor
+    - QualityBuilder
+    - Reunion
+    - RunAndGun
+    - RPG Style Inventory Revamped
+    - Sandy's RPG Style Inventory
+    - Simple Sidearms
+    - Simply More Bridges (Continued)
+    - Smarter Construction
+    - Sparkling Worlds - Full Mod
+    - Sparkling Worlds - Modular Core - Reduced features
+    - SRTS Expanded
+    - Stuffed Floors
+    - Time-of-Day Switches
+    - Vanilla Achievements Expanded
+    - Vanilla Animals Expanded - Endangered
+    - Vanilla Brewing Expanded
+    - Vanilla Cooking Expanded
+    - Vanilla Events Expanded
+    - Vanilla Expanded Framework
+    - Vanilla Factions Expanded - Insectoids
+    - Vanilla Factions Expanded - Mechanoids
+    - Vanilla Factions Expanded - Medieval
+    - Vanilla Factions Expanded - Settlers
+    - Vanilla Factions Expanded - Vikings
+    - Vanilla Fishing Expanded
+    - Vanilla Furniture Expanded - Farming
+    - Vanilla Furniture Expanded - Power
+    - Vanilla Furniture Expanded - Security
+    - Vanilla Hair Expanded
+    - Vanilla Plants Expanded - Auto Plow Patch
+    - Vanilla Social Interactions Expanded
+    - Vanilla Traits Expanded (Partial Support)
+    - Vanilla Weapons Expanded - Laser
+    - What the hack?!
+  </description>
   <modDependencies>
-    <li>
-      <packageId>brrainz.harmony</packageId>
-      <displayName>Harmony</displayName>
-      <steamWorkshopUrl>steam://url/CommunityFilePage/2009463077</steamWorkshopUrl>
-      <downloadUrl>https://github.com/pardeike/HarmonyRimWorld/releases/latest</downloadUrl>
-    </li>
     <li>
       <packageId>zap.multiplayerbodged</packageId>
       <displayName>Multiplayer Bodged</displayName>
@@ -24,12 +86,10 @@ Check the provided file to read specific mods targeted and why. It's unlikely mo
     </li>
   </modDependencies>
   <loadAfter>
-    <li>brrainz.harmony</li>
     <li>zap.multiplayerbodged</li>
-    <li>shunter.personaweaponsunbound</li>
-    <li>shunter.uniqueweaponsunbound</li>
   </loadAfter>
   <loadBefore>
-    <li>rwmt.MultiplayerCompatibility</li>
+    <li>UnlimitedHugs.HugsLib</li>
+    <li>OskarPotocki.VanillaFactionsExpanded.Core</li>
   </loadBefore>
 </ModMetaData>

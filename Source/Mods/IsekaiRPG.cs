@@ -1,0 +1,785 @@
+using System;
+using System.Collections.Generic;
+using System.Reflection;
+using System.Reflection.Emit;
+using HarmonyLib;
+using Multiplayer.API;
+using RimWorld;
+using Verse;
+
+namespace Multiplayer.Compat
+{
+    /// <summary>Isekai RPG Leveling by Jelly Creative</summary>
+    /// <see href="https://steamcommunity.com/sharedfiles/filedetails/?id=3657580708"/>
+    [MpCompatFor("JellyCreative.IsekaiLeveling")]
+    public class IsekaiRPGCompat
+    {
+        private static readonly string[] StatAllocationFieldNames = ["strength", "vitality", "dexterity", "intelligence", "wisdom", "charisma"];
+        private static readonly string[] PendingFieldNames = ["pendingSTR", "pendingVIT", "pendingDEX", "pendingINT", "pendingWIS", "pendingCHA"];
+
+        #region Fields
+
+        private static Type isekaiComponentType;
+        private static Type isekaiStatAllocationType;
+        private static Type passiveTreeTrackerType;
+        private static Type windowStatsType;
+        private static Type iTabType;
+        private static Type raidRankSystemType;
+        private static Type pawnStatGeneratorType;
+        private static Type treeAutoAssignerType;
+        private static Type manaCoreCompType;
+        private static Type windowCreatureStatsType;
+        private static Type iTabCreatureStatsType;
+        private static Type mobRankComponentType;
+        private static Type auraFeelType;
+        private static Type isekaiGizmoProviderType;
+        private static Type forgeUtilityType;
+        private static Type refineResultType;
+        private static Type windowForgeType;
+        private static Type windowRunicStationType;
+        private static Type compForgeEnhancementType;
+
+        private static FieldInfo[] statAllocationFields;
+        private static FieldInfo statAllocationAvailablePoints;
+        private static FieldInfo isekaiCompStatsField;
+        private static FieldInfo isekaiCompPassiveTreeField;
+        private static FieldInfo raidRankSystemRandomField;
+        private static FieldInfo pawnStatGeneratorRandomField;
+        private static FieldInfo treeAutoAssignerRngField;
+        private static FieldInfo mobRankStatsField;
+
+        private static AccessTools.FieldRef<object, Pawn> statsWindowPawn;
+        private static AccessTools.FieldRef<object, int>[] statsWindowPending;
+        private static AccessTools.FieldRef<object, int> statsWindowPointsSpent;
+        private static AccessTools.FieldRef<object, Pawn> creatureWindowPawn;
+        private static AccessTools.FieldRef<object, int>[] creatureWindowPending;
+        private static AccessTools.FieldRef<object, int> creatureWindowPointsSpent;
+
+        private static ISyncField[] statSyncFields;
+
+        #endregion
+
+        #region Constructor
+
+        public IsekaiRPGCompat(ModContentPack mod)
+        {
+            isekaiComponentType = Resolve("IsekaiLeveling.IsekaiComponent");
+            isekaiStatAllocationType = Resolve("IsekaiLeveling.IsekaiStatAllocation");
+            iTabType = Resolve("IsekaiLeveling.UI.ITab_IsekaiStats");
+            windowStatsType = Resolve("IsekaiLeveling.UI.Window_StatsAttribution");
+            passiveTreeTrackerType = Resolve("IsekaiLeveling.SkillTree.PassiveTreeTracker");
+            raidRankSystemType = Resolve("IsekaiLeveling.MobRanking.RaidRankSystem");
+            pawnStatGeneratorType = Resolve("IsekaiLeveling.PawnStatGenerator");
+            treeAutoAssignerType = Resolve("IsekaiLeveling.SkillTree.TreeAutoAssigner");
+            manaCoreCompType = Resolve("IsekaiLeveling.CompUseEffect_ManaCore");
+            auraFeelType = AccessTools.TypeByName("IsekaiLeveling.Abilities.AuraFeel");
+            isekaiGizmoProviderType = AccessTools.TypeByName("IsekaiLeveling.UI.IsekaiGizmoProvider");
+            forgeUtilityType = AccessTools.TypeByName("IsekaiLeveling.Forge.ForgeUtility");
+            refineResultType = AccessTools.TypeByName("IsekaiLeveling.Forge.ForgeUtility+RefineResult");
+            windowForgeType = AccessTools.TypeByName("IsekaiLeveling.Forge.Window_Forge");
+            windowRunicStationType = AccessTools.TypeByName("IsekaiLeveling.Forge.Window_RunicStation");
+            compForgeEnhancementType = AccessTools.TypeByName("IsekaiLeveling.Forge.CompForgeEnhancement");
+
+            if (isekaiComponentType == null || isekaiStatAllocationType == null
+                || passiveTreeTrackerType == null || windowStatsType == null
+                || iTabType == null || raidRankSystemType == null
+                || pawnStatGeneratorType == null || treeAutoAssignerType == null
+                || manaCoreCompType == null)
+            {
+                Log.Error("[IsekaiMP] One or more required types could not be resolved — patches will NOT be applied.");
+                return;
+            }
+
+            raidRankSystemRandomField = AccessTools.Field(raidRankSystemType, "random");
+            pawnStatGeneratorRandomField = AccessTools.Field(pawnStatGeneratorType, "random");
+            treeAutoAssignerRngField = AccessTools.Field(treeAutoAssignerType, "rng");
+
+            raidRankSystemRandomField.SetValue(null, PatchingUtilities.RandRedirector.Instance);
+            pawnStatGeneratorRandomField.SetValue(null, PatchingUtilities.RandRedirector.Instance);
+            treeAutoAssignerRngField.SetValue(null, PatchingUtilities.RandRedirector.Instance);
+
+            if (raidRankSystemRandomField == null || pawnStatGeneratorRandomField == null || treeAutoAssignerRngField == null)
+            {
+                Log.Warning("[IsekaiMP] One or more required fields could not be resolved — patches will NOT be applied.");
+                return;
+            }
+            else
+            {
+                isekaiCompStatsField = AccessTools.Field(isekaiComponentType, "stats");
+                isekaiCompPassiveTreeField = AccessTools.Field(isekaiComponentType, "passiveTree");
+
+                statAllocationFields = new FieldInfo[StatAllocationFieldNames.Length];
+                for (int i = 0; i < StatAllocationFieldNames.Length; i++)
+                    statAllocationFields[i] = AccessTools.Field(isekaiStatAllocationType, StatAllocationFieldNames[i]);
+                statAllocationAvailablePoints = AccessTools.Field(isekaiStatAllocationType, "availableStatPoints");
+
+                statSyncFields = new ISyncField[StatAllocationFieldNames.Length + 1];
+                for (int i = 0; i < StatAllocationFieldNames.Length; i++)
+                    statSyncFields[i] = MP.RegisterSyncField(isekaiStatAllocationType, StatAllocationFieldNames[i]);
+                statSyncFields[StatAllocationFieldNames.Length] = MP.RegisterSyncField(isekaiStatAllocationType, "availableStatPoints");
+
+                statsWindowPawn = AccessTools.FieldRefAccess<Pawn>(windowStatsType, "pawn");
+                statsWindowPending = new AccessTools.FieldRef<object, int>[PendingFieldNames.Length];
+                for (int i = 0; i < PendingFieldNames.Length; i++)
+                    statsWindowPending[i] = AccessTools.FieldRefAccess<int>(windowStatsType, PendingFieldNames[i]);
+                statsWindowPointsSpent = AccessTools.FieldRefAccess<int>(windowStatsType, "pointsSpent");
+
+                PatchAndLog(isekaiComponentType, "DevAddLevel", prefix: nameof(DevAddLevelPrefix));
+                PatchAndLog(iTabType, "FillTab", prefix: nameof(ITabFillTabPrefix), postfix: nameof(ITabFillTabPostfix));
+                PatchAndLog(windowStatsType, "ApplyChanges", prefix: nameof(ApplyChangesPrefix));
+                PatchAndLog(passiveTreeTrackerType, "Unlock", prefix: nameof(UnlockNodePrefix));
+                PatchAndLog(passiveTreeTrackerType, "TryUnlockChain", prefix: nameof(TryUnlockChainPrefix));
+                PatchAndLog(passiveTreeTrackerType, "Respec", prefix: nameof(RespecPrefix));
+
+                LongEventHandler.ExecuteWhenFinished(() =>
+                {
+                    if (isekaiGizmoProviderType != null && auraFeelType != null)
+                    {
+                        PatchAndLog(isekaiGizmoProviderType, "GetGizmos", postfix: nameof(GetGizmosPostfix));
+                        MP.RegisterSyncMethod(typeof(IsekaiRPGCompat), nameof(SyncedActivateAuraPressure));
+                    }
+                });
+
+                if (forgeUtilityType != null)
+                {
+                    PatchAndLog(forgeUtilityType, "AttemptRefinement", prefix: nameof(AttemptRefinementPrefix));
+                    PatchAndLog(forgeUtilityType, "RepairItem", prefix: nameof(RepairItemPrefix));
+                    MP.RegisterSyncMethod(typeof(IsekaiRPGCompat), nameof(SyncedAttemptRefinement));
+                    MP.RegisterSyncMethod(typeof(IsekaiRPGCompat), nameof(SyncedRepairItem));
+                }
+
+                if (compForgeEnhancementType != null)
+                {
+                    PatchAndLog(compForgeEnhancementType, "TryAddRune", prefix: nameof(TryAddRunePrefix));
+                    PatchAndLog(compForgeEnhancementType, "RemoveRuneAt", prefix: nameof(RemoveRuneAtPrefix));
+                    MP.RegisterSyncMethod(typeof(IsekaiRPGCompat), nameof(SyncedApplyRune));
+                    MP.RegisterSyncMethod(typeof(IsekaiRPGCompat), nameof(SyncedRemoveRune));
+                }
+
+                MP.RegisterSyncWorker<object>(SyncIsekaiStatAllocation, isekaiStatAllocationType);
+                MP.RegisterSyncMethod(typeof(IsekaiRPGCompat), nameof(SyncedDevAddLevel));
+                MP.RegisterSyncMethod(typeof(IsekaiRPGCompat), nameof(SyncedApplyStats));
+                MP.RegisterSyncMethod(typeof(IsekaiRPGCompat), nameof(SyncedUnlockNode));
+                MP.RegisterSyncMethod(typeof(IsekaiRPGCompat), nameof(SyncedUnlockChain));
+                MP.RegisterSyncMethod(typeof(IsekaiRPGCompat), nameof(SyncedRespec));
+                MP.RegisterSyncDelegateLambda(manaCoreCompType, "GetBulkAbsorbOptions", 0);
+            }
+
+            windowCreatureStatsType = AccessTools.TypeByName("IsekaiLeveling.UI.Window_CreatureStats");
+            iTabCreatureStatsType = AccessTools.TypeByName("IsekaiLeveling.UI.ITab_CreatureStats");
+            mobRankComponentType = AccessTools.TypeByName("IsekaiLeveling.MobRanking.MobRankComponent");
+
+            if (windowCreatureStatsType == null || iTabCreatureStatsType == null || mobRankComponentType == null)
+            {
+                Log.Warning("[IsekaiMP] Animal stats types not found — animal stat sync will not be applied.");
+            }
+            else
+            {
+                mobRankStatsField = AccessTools.Field(mobRankComponentType, "stats");
+
+                creatureWindowPawn = AccessTools.FieldRefAccess<Pawn>(windowCreatureStatsType, "pawn");
+                creatureWindowPending = new AccessTools.FieldRef<object, int>[PendingFieldNames.Length];
+                for (int i = 0; i < PendingFieldNames.Length; i++)
+                    creatureWindowPending[i] = AccessTools.FieldRefAccess<int>(windowCreatureStatsType, PendingFieldNames[i]);
+                creatureWindowPointsSpent = AccessTools.FieldRefAccess<int>(windowCreatureStatsType, "pointsSpent");
+
+                PatchAndLog(windowCreatureStatsType, "ApplyChanges", prefix: nameof(CreatureApplyChangesPrefix));
+                PatchAndLog(iTabCreatureStatsType, "FillTab", prefix: nameof(ITabCreatureFillTabPrefix), postfix: nameof(ITabFillTabPostfix));
+
+                MP.RegisterSyncMethod(typeof(IsekaiRPGCompat), nameof(SyncedApplyCreatureStats));
+            }
+        }
+
+        #endregion
+
+        #region Utility
+
+        private static Type Resolve(string typeName)
+        {
+            var type = AccessTools.TypeByName(typeName);
+            if (type == null)
+                Log.Error($"[IsekaiMP] Could not resolve type '{typeName}' — mod version may have changed.");
+            return type;
+        }
+
+        private static void PatchAndLog(Type targetType, string methodName, string prefix = null, string postfix = null, string transpiler = null)
+        {
+            var method = AccessTools.DeclaredMethod(targetType, methodName);
+            if (method == null)
+            {
+                Log.Error($"[IsekaiMP] Could not find method '{targetType.Name}.{methodName}' — patch skipped.");
+                return;
+            }
+            MpCompat.harmony.Patch(method,
+                prefix: prefix != null ? new HarmonyMethod(typeof(IsekaiRPGCompat), prefix) : null,
+                postfix: postfix != null ? new HarmonyMethod(typeof(IsekaiRPGCompat), postfix) : null,
+                transpiler: transpiler != null ? new HarmonyMethod(typeof(IsekaiRPGCompat), transpiler) : null);
+        }
+
+        private static ThingComp GetCompByType(Pawn pawn, Type compType)
+        {
+            if (pawn?.AllComps == null || compType == null) return null;
+            foreach (var comp in pawn.AllComps)
+                if (compType.IsInstanceOfType(comp))
+                    return comp;
+            return null;
+        }
+
+        private static ThingComp GetThingCompByType(Thing thing, Type compType)
+        {
+            if (thing is not ThingWithComps twc || twc.AllComps == null || compType == null) return null;
+            foreach (var comp in twc.AllComps)
+                if (compType.IsInstanceOfType(comp))
+                    return comp;
+            return null;
+        }
+
+        private static Pawn FindPawnByComp(Func<ThingComp, bool> match)
+        {
+            foreach (var map in Find.Maps)
+                foreach (var pawn in map.mapPawns.AllPawnsSpawned)
+                {
+                    var comp = GetCompByType(pawn, isekaiComponentType);
+                    if (comp != null && match(comp))
+                        return pawn;
+                }
+
+            if (Find.WorldPawns != null)
+                foreach (var pawn in Find.WorldPawns.AllPawnsAlive)
+                {
+                    var comp = GetCompByType(pawn, isekaiComponentType);
+                    if (comp != null && match(comp))
+                        return pawn;
+                }
+
+            return null;
+        }
+
+        #endregion
+
+        #region Stat Allocation
+
+        private static bool ApplyChangesPrefix(object __instance)
+        {
+            if (!MP.IsInMultiplayer) return true;
+
+            Pawn pawn = statsWindowPawn(__instance);
+            if (pawn == null) return true;
+
+            var pending = new int[StatAllocationFieldNames.Length];
+            for (int i = 0; i < pending.Length; i++)
+                pending[i] = statsWindowPending[i](__instance);
+
+            int pointsSpent = 0;
+            bool godMode = Prefs.DevMode && DebugSettings.godMode;
+            if (!godMode)
+            {
+                var comp = GetCompByType(pawn, isekaiComponentType);
+                if (comp != null)
+                {
+                    object statsObj = isekaiCompStatsField.GetValue(comp);
+                    for (int i = 0; i < pending.Length; i++)
+                        pointsSpent += pending[i] - (int)statAllocationFields[i].GetValue(statsObj);
+                }
+            }
+
+            SyncedApplyStats(pawn, pending, pointsSpent, godMode);
+            return false;
+        }
+
+        private static void SyncedApplyStats(Pawn pawn, int[] statValues, int pointsSpent, bool godMode)
+        {
+            var comp = GetCompByType(pawn, isekaiComponentType);
+            if (comp == null) return;
+
+            object statsObj = isekaiCompStatsField.GetValue(comp);
+
+            for (int i = 0; i < statAllocationFields.Length; i++)
+                statAllocationFields[i].SetValue(statsObj, statValues[i]);
+
+            if (!godMode && pointsSpent > 0)
+            {
+                int remaining = (int)statAllocationAvailablePoints.GetValue(statsObj);
+                statAllocationAvailablePoints.SetValue(statsObj, remaining - pointsSpent);
+            }
+
+            AccessTools.DeclaredMethod(pawnStatGeneratorType, "UpdateRankTraitFromStats")?.Invoke(null, [pawn, comp]);
+
+            RefreshStatsWindows(pawn, statsObj);
+        }
+
+        private static void RefreshStatsWindows(Pawn pawn, object statsObj)
+        {
+            foreach (var window in Find.WindowStack.Windows)
+            {
+                if (!windowStatsType.IsInstanceOfType(window)) continue;
+                if (!ReferenceEquals(statsWindowPawn(window), pawn)) continue;
+
+                for (int i = 0; i < statAllocationFields.Length; i++)
+                    statsWindowPending[i](window) = (int)statAllocationFields[i].GetValue(statsObj);
+
+                statsWindowPointsSpent(window) = 0;
+            }
+        }
+
+        #endregion
+
+        #region ITab
+
+        private static void ITabFillTabPrefix(object __instance, ref bool __state)
+        {
+            if (!MP.IsInMultiplayer) return;
+
+            if (Find.Selector.SingleSelectedThing is not Pawn selectedPawn) return;
+
+            var comp = GetCompByType(selectedPawn, isekaiComponentType);
+            var stats = comp != null ? isekaiCompStatsField.GetValue(comp) : null;
+            if (stats == null) return;
+
+            __state = true;
+            MP.WatchBegin();
+            foreach (var field in statSyncFields)
+                field.Watch(stats);
+        }
+
+        private static void ITabFillTabPostfix(bool __state)
+        {
+            if (__state) MP.WatchEnd();
+        }
+
+        #endregion
+
+        #region Skill Tree
+
+        private static bool _suppressUnlockPrefix = false;
+
+        private static bool UnlockNodePrefix(string nodeId, Pawn pawn, ref bool __result)
+        {
+            if (!MP.IsInMultiplayer || _suppressUnlockPrefix || pawn == null) return true;
+            SyncedUnlockNode(pawn, nodeId);
+            __result = false;
+            return false;
+        }
+
+        private static void SyncedUnlockNode(Pawn pawn, string nodeId)
+        {
+            var comp = GetCompByType(pawn, isekaiComponentType);
+            if (comp == null) { Log.Warning($"[IsekaiMP] SyncedUnlockNode: no IsekaiComponent on {pawn.LabelShort}"); return; }
+
+            var passiveTree = isekaiCompPassiveTreeField.GetValue(comp);
+            if (passiveTree == null) { Log.Warning($"[IsekaiMP] SyncedUnlockNode: null passiveTree on {pawn.LabelShort}"); return; }
+
+            _suppressUnlockPrefix = true;
+            try { AccessTools.DeclaredMethod(passiveTreeTrackerType, "Unlock").Invoke(passiveTree, [nodeId, pawn, false]); }
+            finally { _suppressUnlockPrefix = false; }
+        }
+
+        private static bool _suppressUnlockChainPrefix = false;
+
+        private static bool TryUnlockChainPrefix(string targetNodeId, Pawn pawn, ref int __result, ref int pointsSpent, ref string failReason)
+        {
+            if (!MP.IsInMultiplayer || _suppressUnlockChainPrefix || pawn == null) return true;
+            SyncedUnlockChain(pawn, targetNodeId);
+            __result = 0;
+            pointsSpent = 0;
+            failReason = null;
+            return false;
+        }
+
+        private static void SyncedUnlockChain(Pawn pawn, string targetNodeId)
+        {
+            var comp = GetCompByType(pawn, isekaiComponentType);
+            if (comp == null) return;
+
+            var passiveTree = isekaiCompPassiveTreeField.GetValue(comp);
+            if (passiveTree == null) return;
+
+            _suppressUnlockPrefix = true;
+            _suppressUnlockChainPrefix = true;
+            try
+            {
+                object[] args = [targetNodeId, pawn, 0, null];
+                AccessTools.DeclaredMethod(passiveTreeTrackerType, "TryUnlockChain")?.Invoke(passiveTree, args);
+            }
+            finally
+            {
+                _suppressUnlockPrefix = false;
+                _suppressUnlockChainPrefix = false;
+            }
+        }
+
+        private static bool _suppressRespecPrefix = false;
+
+        private static bool RespecPrefix(object __instance)
+        {
+            if (!MP.IsInMultiplayer || _suppressRespecPrefix) return true;
+
+            Pawn owner = FindPawnByComp(c => ReferenceEquals(isekaiCompPassiveTreeField.GetValue(c), __instance));
+            if (owner == null)
+            {
+                Log.Warning("[IsekaiMP] RespecPrefix: could not identify owning pawn — running locally (may desync!)");
+                return true;
+            }
+
+            SyncedRespec(owner);
+            return false;
+        }
+
+        private static void SyncedRespec(Pawn pawn)
+        {
+            var comp = GetCompByType(pawn, isekaiComponentType);
+            if (comp == null) { Log.Warning($"[IsekaiMP] SyncedRespec: no IsekaiComponent on {pawn.LabelShort}"); return; }
+
+            var passiveTree = isekaiCompPassiveTreeField.GetValue(comp);
+            if (passiveTree == null) { Log.Warning($"[IsekaiMP] SyncedRespec: null passiveTree on {pawn.LabelShort}"); return; }
+
+            _suppressRespecPrefix = true;
+            try { AccessTools.DeclaredMethod(passiveTreeTrackerType, "Respec").Invoke(passiveTree, null); }
+            finally { _suppressRespecPrefix = false; }
+        }
+
+        #endregion
+
+        #region Dev Tools
+
+        private static bool _suppressDevAddLevelPrefix = false;
+
+        private static bool DevAddLevelPrefix(object __instance, int levels)
+        {
+            if (!MP.IsInMultiplayer || _suppressDevAddLevelPrefix) return true;
+
+            Pawn pawn = FindPawnByComp(c => ReferenceEquals(c, __instance));
+            if (pawn == null)
+            {
+                Log.Warning("[IsekaiMP] DevAddLevelPrefix: could not identify owning pawn — running locally (may desync!)");
+                return true;
+            }
+
+            SyncedDevAddLevel(pawn, levels);
+            return false;
+        }
+
+        private static void SyncedDevAddLevel(Pawn pawn, int levels)
+        {
+            var comp = GetCompByType(pawn, isekaiComponentType);
+            if (comp == null) { Log.Warning($"[IsekaiMP] SyncedDevAddLevel: no IsekaiComponent on {pawn.LabelShort}"); return; }
+
+            _suppressDevAddLevelPrefix = true;
+            try { AccessTools.DeclaredMethod(isekaiComponentType, "DevAddLevel").Invoke(comp, [levels]); }
+            finally { _suppressDevAddLevelPrefix = false; }
+        }
+
+        #endregion
+
+        #region Sync Worker
+
+        private static void SyncIsekaiStatAllocation(SyncWorker sync, ref object statsAllocation)
+        {
+            if (sync.isWriting)
+            {
+                var statsAllocationRef = statsAllocation;
+                sync.Write(FindPawnByComp(c => ReferenceEquals(isekaiCompStatsField.GetValue(c), statsAllocationRef)));
+            }
+            else
+            {
+                var pawn = sync.Read<Pawn>();
+                if (pawn != null)
+                {
+                    var comp = GetCompByType(pawn, isekaiComponentType);
+                    if (comp != null)
+                        statsAllocation = isekaiCompStatsField.GetValue(comp);
+                }
+            }
+        }
+
+        #endregion
+
+        #region Animal Stats
+
+        private static bool CreatureApplyChangesPrefix(object __instance)
+        {
+            if (!MP.IsInMultiplayer) return true;
+
+            Pawn pawn = creatureWindowPawn(__instance);
+            if (pawn == null) return true;
+
+            var pending = new int[StatAllocationFieldNames.Length];
+            for (int i = 0; i < pending.Length; i++)
+                pending[i] = creatureWindowPending[i](__instance);
+
+            int pointsSpent = 0;
+            bool godMode = Prefs.DevMode && DebugSettings.godMode;
+            if (!godMode)
+            {
+                var comp = GetCompByType(pawn, mobRankComponentType);
+                if (comp != null)
+                {
+                    object statsObj = mobRankStatsField.GetValue(comp);
+                    for (int i = 0; i < pending.Length; i++)
+                        pointsSpent += pending[i] - (int)statAllocationFields[i].GetValue(statsObj);
+                }
+            }
+
+            SyncedApplyCreatureStats(pawn, pending, pointsSpent, godMode);
+            return false;
+        }
+
+        private static void SyncedApplyCreatureStats(Pawn pawn, int[] statValues, int pointsSpent, bool godMode)
+        {
+            var comp = GetCompByType(pawn, mobRankComponentType);
+            if (comp == null) return;
+
+            object statsObj = mobRankStatsField.GetValue(comp);
+            if (statsObj == null) return;
+
+            for (int i = 0; i < statAllocationFields.Length; i++)
+                statAllocationFields[i].SetValue(statsObj, statValues[i]);
+
+            if (!godMode && pointsSpent > 0)
+            {
+                int remaining = (int)statAllocationAvailablePoints.GetValue(statsObj);
+                statAllocationAvailablePoints.SetValue(statsObj, remaining - pointsSpent);
+            }
+
+            RefreshCreatureStatsWindows(pawn, statsObj);
+        }
+
+        private static void RefreshCreatureStatsWindows(Pawn pawn, object statsObj)
+        {
+            foreach (var window in Find.WindowStack.Windows)
+            {
+                if (!windowCreatureStatsType.IsInstanceOfType(window)) continue;
+                if (!ReferenceEquals(creatureWindowPawn(window), pawn)) continue;
+
+                for (int i = 0; i < statAllocationFields.Length; i++)
+                    creatureWindowPending[i](window) = (int)statAllocationFields[i].GetValue(statsObj);
+
+                creatureWindowPointsSpent(window) = 0;
+            }
+        }
+
+        private static void ITabCreatureFillTabPrefix(object __instance, ref bool __state)
+        {
+            if (!MP.IsInMultiplayer) return;
+
+            if (Find.Selector.SingleSelectedThing is not Pawn selectedPawn) return;
+
+            var comp = GetCompByType(selectedPawn, mobRankComponentType);
+            var stats = comp != null ? mobRankStatsField.GetValue(comp) : null;
+            if (stats == null) return;
+
+            __state = true;
+            MP.WatchBegin();
+            foreach (var field in statSyncFields)
+                field.Watch(stats);
+        }
+
+        #endregion
+
+        #region Abilities
+
+        private static IEnumerable<Gizmo> GetGizmosPostfix(IEnumerable<Gizmo> __result, Pawn pawn)
+        {
+            foreach (var gizmo in __result)
+            {
+                if (gizmo is Command_Action cmd && cmd.defaultLabel == "Isekai_AuraFeel_Label".Translate())
+                {
+                    cmd.action = () => SyncedActivateAuraPressure(pawn);
+                }
+                yield return gizmo;
+            }
+        }
+
+        private static void SyncedActivateAuraPressure(Pawn pawn)
+        {
+            if (pawn == null) return;
+            var comp = GetCompByType(pawn, isekaiComponentType);
+            if (comp == null) return;
+
+            AccessTools.DeclaredMethod(auraFeelType, "Activate")?.Invoke(null, [pawn, comp]);
+        }
+
+        #endregion
+
+        #region Forge
+
+        private static bool _suppressRefinePrefix = false;
+
+        private static bool AttemptRefinementPrefix(Thing item, Map map, Pawn crafter, ref object __result)
+        {
+            if (!MP.IsInMultiplayer || _suppressRefinePrefix) return true;
+            SyncedAttemptRefinement(item, map);
+            if (refineResultType != null)
+                __result = Enum.ToObject(refineResultType, 1);
+            return false;
+        }
+
+        private static void SyncedAttemptRefinement(Thing item, Map map)
+        {
+            if (item == null || map == null) return;
+            _suppressRefinePrefix = true;
+            try
+            {
+                AccessTools.DeclaredMethod(forgeUtilityType, "AttemptRefinement")?.Invoke(null, [item, map, null]);
+            }
+            finally
+            {
+                _suppressRefinePrefix = false;
+            }
+        }
+
+        private static bool _suppressRepairPrefix = false;
+
+        private static bool RepairItemPrefix(Thing item, Map map, ref bool __result)
+        {
+            if (!MP.IsInMultiplayer || _suppressRepairPrefix) return true;
+            SyncedRepairItem(item, map);
+            __result = false;
+            return false;
+        }
+
+        private static void SyncedRepairItem(Thing item, Map map)
+        {
+            if (item == null || map == null) return;
+            _suppressRepairPrefix = true;
+            try
+            {
+                AccessTools.DeclaredMethod(forgeUtilityType, "RepairItem")?.Invoke(null, [item, map]);
+            }
+            finally
+            {
+                _suppressRepairPrefix = false;
+            }
+        }
+
+        #endregion
+
+        #region Runic Station
+
+        private static bool _suppressTryAddRune = false;
+
+        private static bool TryAddRunePrefix(ThingComp __instance, Def rune, int rank, ref bool __result)
+        {
+            if (!MP.IsInMultiplayer || _suppressTryAddRune) return true;
+            if (windowRunicStationType == null || Find.WindowStack?.IsOpen(windowRunicStationType) == true)
+            {
+                if (rune != null && __instance?.parent != null)
+                {
+                    SyncedApplyRune(__instance.parent, rune.defName, rank);
+                    __result = false;
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private static void SyncedApplyRune(Thing equipment, string runeDefName, int rank)
+        {
+            if (equipment == null || string.IsNullOrEmpty(runeDefName)) return;
+            var comp = GetThingCompByType(equipment, compForgeEnhancementType);
+            if (comp == null) return;
+
+            var runeDefType = AccessTools.TypeByName("IsekaiLeveling.Forge.RuneDef");
+            if (runeDefType == null) return;
+
+            var runeDef = GenDefDatabase.GetDef(runeDefType, runeDefName, false);
+            if (runeDef == null) return;
+
+            _suppressTryAddRune = true;
+            try
+            {
+                var tryAddRuneMethod = AccessTools.DeclaredMethod(compForgeEnhancementType, "TryAddRune");
+                if (tryAddRuneMethod == null) return;
+
+                bool added = (bool)tryAddRuneMethod.Invoke(comp, [runeDef, rank]);
+                if (added && !(Prefs.DevMode && DebugSettings.godMode))
+                {
+                    string runeBaseName = runeDefName.StartsWith("Isekai_RuneDef_")
+                        ? runeDefName.Substring("Isekai_RuneDef_".Length)
+                        : runeDefName;
+                    string itemDefName;
+                    switch (rank)
+                    {
+                        case 5: itemDefName = $"Isekai_Rune_{runeBaseName}_V"; break;
+                        case 4: itemDefName = $"Isekai_Rune_{runeBaseName}_IV"; break;
+                        case 3: itemDefName = $"Isekai_Rune_{runeBaseName}_III"; break;
+                        case 2: itemDefName = $"Isekai_Rune_{runeBaseName}_II"; break;
+                        default: itemDefName = $"Isekai_Rune_{runeBaseName}"; break;
+                    }
+
+                    Map map = equipment.MapHeld ?? Find.CurrentMap;
+                    Thing runeItem = null;
+                    if (map?.listerThings?.AllThings != null)
+                    {
+                        foreach (var t in map.listerThings.AllThings)
+                        {
+                            if (t != null && !t.Destroyed && t.def?.defName == itemDefName && t.stackCount >= 1)
+                            {
+                                runeItem = t;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (runeItem == null && Find.Maps != null)
+                    {
+                        foreach (var m in Find.Maps)
+                        {
+                            if (m == map || m.listerThings?.AllThings == null) continue;
+                            foreach (var t in m.listerThings.AllThings)
+                            {
+                                if (t != null && !t.Destroyed && t.def?.defName == itemDefName && t.stackCount >= 1)
+                                {
+                                    runeItem = t;
+                                    break;
+                                }
+                            }
+                            if (runeItem != null) break;
+                        }
+                    }
+
+                    if (runeItem != null)
+                    {
+                        if (runeItem.stackCount > 1)
+                            runeItem.stackCount -= 1;
+                        else
+                            runeItem.Destroy();
+                    }
+                }
+            }
+            finally
+            {
+                _suppressTryAddRune = false;
+            }
+        }
+
+        private static bool _suppressRemoveRune = false;
+
+        private static bool RemoveRuneAtPrefix(ThingComp __instance, int index, ref bool __result)
+        {
+            if (!MP.IsInMultiplayer || _suppressRemoveRune) return true;
+            SyncedRemoveRune(__instance.parent, index);
+            __result = false;
+            return false;
+        }
+
+        private static void SyncedRemoveRune(Thing equipment, int index)
+        {
+            if (equipment == null) return;
+            var comp = GetThingCompByType(equipment, compForgeEnhancementType);
+            if (comp == null) return;
+
+            _suppressRemoveRune = true;
+            try
+            {
+                AccessTools.DeclaredMethod(compForgeEnhancementType, "RemoveRuneAt").Invoke(comp, [index]);
+            }
+            finally
+            {
+                _suppressRemoveRune = false;
+            }
+        }
+
+        #endregion
+    }
+}
