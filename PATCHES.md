@@ -75,8 +75,12 @@ Jobs mod is removed, so this replaces it rather than stacking with it.
 
 - The 1.7 module code was reconstructed from the temporary 1.7 build because upstream has no public
   1.7 branch. See `NOTICE.md`.
-- `About/About.xml` depends on `zap.multiplayerbodged` instead of `rwmt.Multiplayer`, because this
-  fork runs against the Multiplayer Bodged build.
+- `About/About.xml` uses the fork's own package id, `zap.multiplayerbodgejobs`, so the original
+  Multiplayer Compatibility has to be disabled when this is enabled. It depends on
+  `zap.multiplayerbodged` because this fork runs against the Multiplayer Bodged build.
 - `main` removes the old Bodge Jobs entry points (`MultiplayerBodgeJobsMod`,
   `SkipObsoleteVcefCompat`) now that the Unbound patch and the VCEF fix live in the compat modules.
-- The `Referenced` assembly and its modules are not part of this fork yet on either branch.
+- The `Referenced` assembly is built on the 1.7 branch (`Source_Referenced/`, five modules). Its
+  `VanillaFactionsClassical` and `VanillaFactionsDeserters` modules are excluded until those mods
+  have 1.7 builds. On `main` the Referenced project and its `References/` folder are still not
+  carried.
