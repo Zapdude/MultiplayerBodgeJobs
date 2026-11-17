@@ -1,0 +1,97 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- RimWorld 1.7 runs on .NET 10. -->
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>Multiplayer_Gravship2Overrides</AssemblyName>
+    <RootNamespace>Multiplayer.Compat.Workshop17.Bodies</RootNamespace>
+    <LangVersion>14.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <OutputPath>..\Referenced</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <DebugType>none</DebugType>
+    <Optimize>true</Optimize>
+    <NoWarn>CS0108;CS0114;CS0162;CS0168;CS0169;CS0219;CS0414;CS0649;CS0618;CS0672;CS0809;CS8632;CS9113;CS0436</NoWarn>
+
+    <!-- Steam workshop root. Override on the command line if the library lives elsewhere. -->
+    <WorkshopDir Condition="'$(WorkshopDir)' == ''">c:\program files (x86)\steam\steamapps\workshop\content\294100</WorkshopDir>
+    <RimWorldManagedDir Condition="'$(RimWorldManagedDir)' == ''">c:\program files (x86)\steam\steamapps\common\RimWorld\RimWorldWin64_Data\Managed</RimWorldManagedDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Bodies\*.cs" />
+    <EmbeddedResource Include="Workshop17.replacements.txt">
+      <LogicalName>Workshop17.replacements.txt</LogicalName>
+    </EmbeddedResource>
+    <!-- Provenance of the assemblies the bodies were decompiled from (SHA256 + path). -->
+    <EmbeddedResource Include="Workshop17.inputs.txt">
+      <LogicalName>Workshop17.inputs.txt</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Krafs.Rimworld.Ref" Version="1.7.4985-unstable" />
+    <PackageReference Include="Krafs.Publicizer" Version="2.3.0" />
+    <PackageReference Include="Lib.Harmony" Version="3.0.0-rc.3" ExcludeAssets="runtime" />
+    <PackageReference Include="RimWorld.MultiplayerAPI" Version="0.6.0" />
+  </ItemGroup>
+
+  <!-- PatchingUtilities.TimeSnapshot comes from the main compat assembly. -->
+  <ItemGroup>
+    <Reference Include="Multiplayer_Compat">
+      <HintPath>..\Assemblies\Multiplayer_Compat.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Source\Multiplayer_Compat.csproj" ReferenceOutputAssembly="false" Private="false" />
+  </ItemGroup>
+
+  <!--
+    Vanilla Gravship Expanded - Chapter 2 (3799737423). The bodies are replacements for its
+    methods, so they need both its types and the non-public members they read.
+  -->
+  <ItemGroup>
+    <Reference Include="VanillaGravshipExpanded2">
+      <HintPath>$(WorkshopDir)\3799737423\1.7\Assemblies\VanillaGravshipExpanded2.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- Chapter 1 types the Chapter 2 bodies share. -->
+    <Reference Include="VanillaGravshipExpanded">
+      <HintPath>$(WorkshopDir)\3609835606\1.7\Assemblies\VanillaGravshipExpanded.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- VEF supplies the fuel provider interfaces and KCSG the landing layout types. -->
+    <Reference Include="VEF">
+      <HintPath>$(WorkshopDir)\2023507013\1.7\Assemblies\VEF.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="PipeSystem">
+      <HintPath>$(WorkshopDir)\2023507013\1.7\Assemblies\PipeSystem.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="KCSG">
+      <HintPath>$(WorkshopDir)\2023507013\1.7\Assemblies\KCSG.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!--
+      VGE2 is built against Unity, so its signatures expose UnityEngine.CoreModule types while the
+      1.7 reference package models UnityEngine with UnityStubs. CoreModule is aliased so the
+      signatures resolve without a duplicate-type error; nothing here uses the alias.
+    -->
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(RimWorldManagedDir)\UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+      <Aliases>unitylegacy</Aliases>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Publicize Include="Assembly-CSharp;VanillaGravshipExpanded2;VanillaGravshipExpanded;VEF;KCSG;PipeSystem" />
+  </ItemGroup>
+
+</Project>

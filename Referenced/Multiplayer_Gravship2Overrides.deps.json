@@ -1,0 +1,41 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v10.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v10.0": {
+      "Multiplayer_Gravship2Overrides/1.0.0": {
+        "dependencies": {
+          "RimWorld.MultiplayerAPI": "0.6.0"
+        },
+        "runtime": {
+          "Multiplayer_Gravship2Overrides.dll": {}
+        }
+      },
+      "RimWorld.MultiplayerAPI/0.6.0": {
+        "runtime": {
+          "lib/net472/0MultiplayerAPI.dll": {
+            "assemblyVersion": "0.6.0.0",
+            "fileVersion": "0.6.0.0"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "Multiplayer_Gravship2Overrides/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "RimWorld.MultiplayerAPI/0.6.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-JQ57MGb20RRIBuxF5Y4xKs0UHIGtfLGGJH0DL0mpASsMvH68+2iSLGPOaGRXs8BBt5zz5susHh5AzkL2t9cWXw==",
+      "path": "rimworld.multiplayerapi/0.6.0",
+      "hashPath": "rimworld.multiplayerapi.0.6.0.nupkg.sha512"
+    }
+  }
+}
