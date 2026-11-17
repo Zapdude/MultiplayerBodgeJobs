@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>Multiplayer_Compat</AssemblyName>
+    <RootNamespace>Multiplayer.Compat</RootNamespace>
+    <LangVersion>14.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <AssemblyVersion>1.1.0.0</AssemblyVersion>
+    <FileVersion>1.1.0.0</FileVersion>
+    <OutputPath>..\Assemblies</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <DebugType>none</DebugType>
+    <Optimize>true</Optimize>
+    <NoWarn>CS0108;CS0114;CS0162;CS0168;CS0169;CS0219;CS0414;CS0649;CS0618;CS0672;CS0809;CS8632;CS9113</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Krafs.Rimworld.Ref" Version="1.7.4985-unstable" />
+    <PackageReference Include="Krafs.Publicizer" Version="2.3.0" />
+    <PackageReference Include="Lib.Harmony" Version="3.0.0-rc.3" ExcludeAssets="runtime" />
+    <PackageReference Include="RimWorld.MultiplayerAPI" Version="0.6.0" />
+    <PackageReference Include="Mono.Cecil" Version="0.11.6" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Publicize Include="Assembly-CSharp" />
+  </ItemGroup>
+
+</Project>
