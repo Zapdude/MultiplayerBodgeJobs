@@ -1,7 +1,8 @@
-# Patch tracking
+# Patch tracking — `main` branch (RimWorld 1.6)
 
-Changes this fork carries on top of [rwmt/Multiplayer-Compatibility](https://github.com/rwmt/Multiplayer-Compatibility),
-and what it takes to send each one upstream. `main` is the 1.6 fork; `1.7` is the 1.7 fork.
+Changes this fork carries on top of [rwmt/Multiplayer-Compatibility](https://github.com/rwmt/Multiplayer-Compatibility)
+for RimWorld 1.6, and what it takes to send each one upstream. This file covers the `main` branch
+only; `1.7` keeps its own tracker for the 1.7 build.
 
 Keep this file current when a patch is added, finished or sent upstream. A patch that is ready
 for a pull request should have its files, the exact behaviour, and a test plan listed here.
@@ -10,8 +11,7 @@ for a pull request should have its files, the exact behaviour, and a test plan l
 
 | | |
 | --- | --- |
-| Files | `Source/UnboundWeaponCustomization.cs` |
-| Branches | `main`, `1.7` |
+| Files | `Source/Mods/UnboundWeaponCustomization.cs` |
 | Upstream | new compat module, PR candidate |
 | Status | implemented, needs a two-client test |
 
@@ -42,18 +42,18 @@ Confirm. Check `Player.log` for a missing `SetSpec` warning after a mod update.
 | | |
 | --- | --- |
 | Files | `Source/Mods/VanillaFishingExpanded.cs` |
-| Branches | `main` |
 | Upstream | PR candidate to `master` (1.6) |
 | Status | implemented, needs a 1.6 + Odyssey load test |
 
-`1.7` already carries this guard; this is the 1.6 backport.
+Backport of the guard the 1.7 build ships, needed here because this is the branch that targets
+upstream `master`.
 
 **Problem.** Vanilla Fishing Expanded ships a different assembly when Odyssey is installed. That
 build drops `Command_SetFishList`, `Zone_Fishing` and `JobDriver_Fish`, so the compat class's type
 lookups return null and the constructor throws during `MpCompatLoader.Load`. The loader catches it
 and logs, but the compat class stays half-initialised and the error repeats on every load.
 
-**What the change does.** Wraps the constructor body in the same condition the 1.7 branch uses:
+**What the change does.** Wraps the constructor body in the same condition the 1.7 build uses:
 
 ```csharp
 if (!ModsConfig.OdysseyActive
@@ -73,14 +73,10 @@ Jobs mod is removed, so this replaces it rather than stacking with it.
 
 ## Fork plumbing, not for upstream
 
-- The 1.7 module code was reconstructed from the temporary 1.7 build because upstream has no public
-  1.7 branch. See `NOTICE.md`.
 - `About/About.xml` uses the fork's own package id, `zap.multiplayerbodgejobs`, so the original
   Multiplayer Compatibility has to be disabled when this is enabled. It depends on
   `zap.multiplayerbodged` because this fork runs against the Multiplayer Bodged build.
-- `main` removes the old Bodge Jobs entry points (`MultiplayerBodgeJobsMod`,
-  `SkipObsoleteVcefCompat`) now that the Unbound patch and the VCEF fix live in the compat modules.
-- The `Referenced` assembly is built on the 1.7 branch (`Source_Referenced/`, five modules). Its
-  `VanillaFactionsClassical` and `VanillaFactionsDeserters` modules are excluded until those mods
-  have 1.7 builds. On `main` the Referenced project and its `References/` folder are still not
-  carried.
+- This branch does not carry the `Referenced` project or its `References/` folder; that second
+  assembly is built on the 1.7 branch only.
+- This branch does not carry the old Bodge Jobs entry points (`MultiplayerBodgeJobsMod`,
+  `SkipObsoleteVcefCompat`).
