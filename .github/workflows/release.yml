@@ -35,7 +35,7 @@ jobs:
         run: dotnet build Source/Multiplayer_Compat.csproj -c Release
 
       - name: Verify committed assemblies
-        shell: pwsh
+        shell: powershell
         run: |
           foreach ($file in 'Assemblies/Multiplayer_Compat.dll', 'Referenced/Multiplayer_Compat_Referenced.dll') {
             if (-not (Test-Path $file)) { throw "Missing committed assembly: $file" }
@@ -48,7 +48,7 @@ jobs:
           }
 
       - name: Stage mod folder
-        shell: pwsh
+        shell: powershell
         run: |
           New-Item -ItemType Directory -Force "$env:MOD_DIR/Assemblies", "$env:MOD_DIR/Referenced" | Out-Null
           Copy-Item About, Languages, LICENSE, NOTICE.md, PATCHES.md, README.md -Destination $env:MOD_DIR -Recurse
@@ -56,11 +56,11 @@ jobs:
           Copy-Item Referenced/*.dll -Destination "$env:MOD_DIR/Referenced"
 
       - name: Package
-        shell: pwsh
+        shell: powershell
         run: Compress-Archive -Path $env:MOD_DIR -DestinationPath $env:ASSET -Force
 
       - name: Publish release
-        shell: pwsh
+        shell: powershell
         run: |
           $notes = @'
           Rolling build of Multiplayer Bodge Jobs for RimWorld 1.6, from the head of `main`.
@@ -99,7 +99,7 @@ jobs:
           dotnet build Source_Gravship2/Multiplayer_Gravship2Overrides.csproj -c Release
 
       - name: Verify committed assemblies
-        shell: pwsh
+        shell: powershell
         run: |
           foreach ($file in 'Assemblies/Multiplayer_Compat.dll', 'Referenced/Multiplayer_Compat_Referenced.dll', 'Referenced/Multiplayer_Gravship2Overrides.dll') {
             if (-not (Test-Path $file)) { throw "Missing assembly: $file" }
@@ -112,7 +112,7 @@ jobs:
           }
 
       - name: Stage mod folder
-        shell: pwsh
+        shell: powershell
         run: |
           New-Item -ItemType Directory -Force "$env:MOD_DIR/Assemblies", "$env:MOD_DIR/Referenced" | Out-Null
           Copy-Item About, LICENSE, NOTICE.md, PATCHES.md, README.md -Destination $env:MOD_DIR -Recurse
@@ -120,11 +120,11 @@ jobs:
           Copy-Item Referenced/*.dll -Destination "$env:MOD_DIR/Referenced"
 
       - name: Package
-        shell: pwsh
+        shell: powershell
         run: Compress-Archive -Path $env:MOD_DIR -DestinationPath $env:ASSET -Force
 
       - name: Publish release
-        shell: pwsh
+        shell: powershell
         run: |
           $notes = @'
           Rolling build of Multiplayer Bodge Jobs for RimWorld 1.7, from the head of the `1.7` branch. Experimental: RimWorld 1.7 and the modules behind it are still moving.
