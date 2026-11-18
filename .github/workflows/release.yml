@@ -80,9 +80,10 @@ jobs:
   # instead, so nothing third-party enters the repo and the release is a real build of the branch.
   release-1-7:
     name: Release 1.7
-    # Manual dispatch only. The runner is ephemeral and registered with the bodgejobs-1.7 label,
-    # so it can only take this job and it unregisters itself once the job finishes.
-    if: github.ref_name == '1.7' && github.event_name == 'workflow_dispatch'
+    # Manual dispatch only, by the repository owner. The runner is ephemeral and registered with
+    # the bodgejobs-1.7 label, so it can only take this job and it unregisters itself afterwards.
+    # triggering_actor is checked as well so a re-run by another account cannot reuse this job.
+    if: github.ref_name == '1.7' && github.event_name == 'workflow_dispatch' && github.actor == 'Zapdude' && github.triggering_actor == 'Zapdude'
     runs-on: [self-hosted, Windows, bodgejobs-1.7]
     env:
       GH_TOKEN: ${{ github.token }}
