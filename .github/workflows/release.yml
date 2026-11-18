@@ -69,8 +69,9 @@ jobs:
 
           Contains the base compat assembly and the Referenced assembly (VEF, VFE Empire, VFE Classical, VFE Deserters, VGE, Altered Carbon, Hemogen Extractor).
           '@
-          gh release view $env:RELEASE_TAG 2>$null | Out-Null
-          if ($LASTEXITCODE -eq 0) { gh release delete --cleanup-tag --yes $env:RELEASE_TAG }
+          # Windows PowerShell turns a native command's stderr into an error record, and the
+          # actions wrapper stops on those, so the existence check runs through cmd.
+          cmd /c "gh release delete --cleanup-tag --yes $env:RELEASE_TAG 2>nul"
           gh release create $env:RELEASE_TAG --target ${{ github.sha }} --title $env:RELEASE_TITLE --notes $notes
           gh release upload $env:RELEASE_TAG $env:ASSET --clobber
 
@@ -133,7 +134,8 @@ jobs:
 
           Contains the base compat assembly, the Referenced assembly (VEF, VFE Empire, VGE) and the VGE Chapter 2 body module.
           '@
-          gh release view $env:RELEASE_TAG 2>$null | Out-Null
-          if ($LASTEXITCODE -eq 0) { gh release delete --cleanup-tag --yes $env:RELEASE_TAG }
+          # Windows PowerShell turns a native command's stderr into an error record, and the
+          # actions wrapper stops on those, so the existence check runs through cmd.
+          cmd /c "gh release delete --cleanup-tag --yes $env:RELEASE_TAG 2>nul"
           gh release create $env:RELEASE_TAG --target ${{ github.sha }} --title $env:RELEASE_TITLE --notes $notes --prerelease
           gh release upload $env:RELEASE_TAG $env:ASSET --clobber
