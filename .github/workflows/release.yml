@@ -1,0 +1,137 @@
+name: Release
+
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - 1.7
+
+jobs:
+  # 1.6 builds the base assembly from NuGet references and packages the committed assemblies.
+  # The Referenced assembly needs third-party mod DLLs that must not be redistributed, so it is
+  # built locally and shipped as committed.
+  release-1-6:
+    name: Release 1.6
+    if: github.ref_name == 'main'
+    runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: continuous-1.6
+      RELEASE_TITLE: Multiplayer Bodge Jobs 1.6 (Continuous)
+      MOD_DIR: dist/MultiplayerBodgeJobs
+      ASSET: MultiplayerBodgeJobs-1.6.zip
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build compat assembly
+        run: dotnet build Source/Multiplayer_Compat.csproj -c Release
+
+      - name: Verify committed assemblies
+        shell: pwsh
+        run: |
+          foreach ($file in 'Assemblies/Multiplayer_Compat.dll', 'Referenced/Multiplayer_Compat_Referenced.dll') {
+            if (-not (Test-Path $file)) { throw "Missing committed assembly: $file" }
+          }
+          $drift = git status --porcelain -- Assemblies Referenced
+          if ($drift) {
+            Write-Warning 'The build output differs from the committed assemblies:'
+            $drift | ForEach-Object { Write-Warning $_ }
+            Write-Warning 'Commit the rebuilt assemblies on main so the release matches source.'
+          }
+
+      - name: Stage mod folder
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force "$env:MOD_DIR/Assemblies", "$env:MOD_DIR/Referenced" | Out-Null
+          Copy-Item About, Languages, LICENSE, NOTICE.md, PATCHES.md, README.md -Destination $env:MOD_DIR -Recurse
+          Copy-Item Assemblies/*.dll -Destination "$env:MOD_DIR/Assemblies"
+          Copy-Item Referenced/*.dll -Destination "$env:MOD_DIR/Referenced"
+
+      - name: Package
+        shell: pwsh
+        run: Compress-Archive -Path $env:MOD_DIR -DestinationPath $env:ASSET -Force
+
+      - name: Publish release
+        shell: pwsh
+        run: |
+          $notes = @'
+          Rolling build of Multiplayer Bodge Jobs for RimWorld 1.6, from the head of `main`.
+
+          Requires Multiplayer Bodged (`zap.multiplayerbodged`). Do not enable the original Multiplayer Compatibility alongside this mod.
+
+          Contains the base compat assembly and the Referenced assembly (VEF, VFE Empire, VFE Classical, VFE Deserters, VGE, Altered Carbon, Hemogen Extractor).
+          '@
+          gh release view $env:RELEASE_TAG 2>$null | Out-Null
+          if ($LASTEXITCODE -eq 0) { gh release delete --cleanup-tag --yes $env:RELEASE_TAG }
+          gh release create $env:RELEASE_TAG --target ${{ github.sha }} --title $env:RELEASE_TITLE --notes $notes
+          gh release upload $env:RELEASE_TAG $env:ASSET --clobber
+
+  # 1.7 needs installed workshop mods and the game's UnityEngine.CoreModule.dll, which CI cannot
+  # obtain without redistributing them or logging into Steam. It builds on a self-hosted runner
+  # instead, so nothing third-party enters the repo and the release is a real build of the branch.
+  release-1-7:
+    name: Release 1.7
+    if: github.ref_name == '1.7'
+    runs-on: [self-hosted, Windows]
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: continuous-1.7
+      RELEASE_TITLE: Multiplayer Bodge Jobs 1.7 (Continuous)
+      MOD_DIR: dist/MultiplayerBodgeJobs
+      ASSET: MultiplayerBodgeJobs-1.7.zip
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build all assemblies
+        run: |
+          dotnet build Source/Multiplayer_Compat.csproj -c Release
+          dotnet build Source_Referenced/Multiplayer_Compat_Referenced.csproj -c Release
+          dotnet build Source_Gravship2/Multiplayer_Gravship2Overrides.csproj -c Release
+
+      - name: Verify committed assemblies
+        shell: pwsh
+        run: |
+          foreach ($file in 'Assemblies/Multiplayer_Compat.dll', 'Referenced/Multiplayer_Compat_Referenced.dll', 'Referenced/Multiplayer_Gravship2Overrides.dll') {
+            if (-not (Test-Path $file)) { throw "Missing assembly: $file" }
+          }
+          $drift = git status --porcelain -- Assemblies Referenced
+          if ($drift) {
+            Write-Warning 'The build output differs from the committed assemblies:'
+            $drift | ForEach-Object { Write-Warning $_ }
+            Write-Warning 'Commit the rebuilt assemblies on 1.7 so the release matches source.'
+          }
+
+      - name: Stage mod folder
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force "$env:MOD_DIR/Assemblies", "$env:MOD_DIR/Referenced" | Out-Null
+          Copy-Item About, LICENSE, NOTICE.md, PATCHES.md, README.md -Destination $env:MOD_DIR -Recurse
+          Copy-Item Assemblies/*.dll -Destination "$env:MOD_DIR/Assemblies"
+          Copy-Item Referenced/*.dll -Destination "$env:MOD_DIR/Referenced"
+
+      - name: Package
+        shell: pwsh
+        run: Compress-Archive -Path $env:MOD_DIR -DestinationPath $env:ASSET -Force
+
+      - name: Publish release
+        shell: pwsh
+        run: |
+          $notes = @'
+          Rolling build of Multiplayer Bodge Jobs for RimWorld 1.7, from the head of the `1.7` branch. Experimental: RimWorld 1.7 and the modules behind it are still moving.
+
+          Requires Multiplayer Bodged (`zap.multiplayerbodged`). Do not enable the original Multiplayer Compatibility alongside this mod.
+
+          Contains the base compat assembly, the Referenced assembly (VEF, VFE Empire, VGE) and the VGE Chapter 2 body module.
+          '@
+          gh release view $env:RELEASE_TAG 2>$null | Out-Null
+          if ($LASTEXITCODE -eq 0) { gh release delete --cleanup-tag --yes $env:RELEASE_TAG }
+          gh release create $env:RELEASE_TAG --target ${{ github.sha }} --title $env:RELEASE_TITLE --notes $notes --prerelease
+          gh release upload $env:RELEASE_TAG $env:ASSET --clobber
