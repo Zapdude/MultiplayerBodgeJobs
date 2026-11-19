@@ -11,27 +11,12 @@ namespace Multiplayer.Compat
 {
     /// <summary>Persona Weapons Unbound and Unique Weapons Unbound by Sam Hunt</summary>
     /// <remarks>
-    /// Both mods start the customize job through <c>Pawn_JobTracker.TryTakeOrderedJob</c>, which
-    /// Multiplayer already syncs. The chosen design is committed afterwards by
-    /// <c>JobDriver_CustomizeWeapon.SetSpec</c>, and that call only happens on the client that
-    /// pressed Confirm, so every other client keeps the old spec and desyncs.
+    /// Both mods commit the chosen spec through <c>JobDriver_CustomizeWeapon.SetSpec</c>, on the
+    /// client that pressed Confirm only. That single caller is the sync point, and the spec travels
+    /// by Scribe because it has no SyncWorker.
     ///
-    /// SetSpec has one caller per mod, so patching it covers both the gizmo and the float-menu path.
-    /// The spec is a plain IExposable with no SyncWorker, so the synced parameter is marked to
-    /// travel by Scribe.
-    ///
-    /// The dialog itself must also close in sync. The driver's waiting toil ends the job with
-    /// Incompletable as soon as spec is null and the dialog is gone, and Confirm calls SetSpec then
-    /// Close in the same frame. While SetSpec is deferred to the synced command, a locally closed
-    /// dialog lets the confirming client bail out a tick early while every other client keeps
-    /// waiting - the job, the unique job id and the map random state then diverge. Registering the
-    /// dialog with DialogUtilities defers its close into the same command stream, so every client
-    /// keeps it open until the spec lands, and Cancel/Escape/Close also stay deterministic.
-    ///
-    /// The dialog also reserves the ingredients and commits the job's haul plan before it calls
-    /// SetSpec, and that work only happens on the client that pressed Confirm. Syncing the spec
-    /// alone would leave every other client without reservations or a plan, so the local call is
-    /// skipped and the synced commit repeats it on all clients before it writes the spec.
+    /// The dialog's ingredient reservation, haul plan and close are deferred into the same command;
+    /// otherwise the confirming client finishes a tick early and the others keep waiting.
     /// </remarks>
     [MpCompatFor("shunter.personaweaponsunbound")]
     [MpCompatFor("shunter.uniqueweaponsunbound")]
@@ -97,10 +82,8 @@ namespace Multiplayer.Compat
             else
                 DialogUtilities.RegisterDialogCloseSync(dialogType);
 
-            // The dialog reserves ingredients and commits the haul plan before SetSpec, on the client
-            // that pressed Confirm only. Skip that call and repeat it in the synced commit, but only
-            // when a default ReservationResult reports success: skipping the original leaves the
-            // dialog checking the default value.
+            // Skip the dialog's reservation and repeat it in the synced commit, but only when a
+            // default ReservationResult reports success; skipping leaves the dialog checking it.
             MethodInfo reserve = null;
             FieldInfo costField = null;
             MethodInfo isSuccess = null;
@@ -177,11 +160,7 @@ namespace Multiplayer.Compat
             return false;
         }
 
-        /// <summary>
-        /// Skipped while the customization dialog is open: the confirming client must not reserve the
-        /// ingredients by itself, because the synced commit reserves them on every client and a local
-        /// reservation would double-book them.
-        /// </summary>
+        /// <summary>Skips the dialog's reservation; the synced commit reserves on every client.</summary>
         private static bool SkipLocalReservationPrefix()
         {
             return !MP.IsInMultiplayer || !MP.InInterface;
@@ -206,9 +185,8 @@ namespace Multiplayer.Compat
             if (driver == null || !target.DriverType.IsInstanceOfType(driver))
                 return;
 
-            // The dialog reserves ingredients and commits the haul plan before SetSpec; repeat that
-            // here so every client ends up with the same reservations and plan. The prefix above only
-            // skips the dialog's own call, not this one, because commands run outside the interface.
+            // Repeat the dialog's reservation here: its own call is skipped in the interface, and
+            // commands run outside it, so this reaches the real method.
             if (target.Reserve != null)
             {
                 object costs = target.CostField.GetValue(spec);

@@ -13,20 +13,13 @@ using Verse.AI;
 namespace Multiplayer.Compat;
 
 /// <summary>
-/// Supply Shelf by Firework. Two per-shelf edits happen only on the client that makes them:
-/// linking a bench to a <c>CompDirectSupply</c> and moving the shelf's stack limit. Both are
-/// rerouted through synced commands here, and a supply comp may no longer feed a bench that
-/// belongs to another faction.
+/// Supply Shelf by Firework. Linking a bench and changing the stack limit run through synced
+/// commands, and a supply comp may not feed another faction's bench.
 /// </summary>
 /// <remarks>
-/// The mod's own <c>CompDirectSupply.Covers</c> is also used while a bill reserves its
-/// ingredients. That call has to agree on every client, so the postfix of
-/// <c>DoBillShelfIngredients_Patch</c> is transpiled to require that the pawn is on the bench's
-/// map and actually holds the reservation.
-///
-/// The <c>freeze</c> mod setting changes def power use and per-shelf cached state, so it is
-/// host-authoritative: clients get a disabled checkbox, the host's change travels as a command,
-/// and a per-game snapshot carries the value for clients that join later.
+/// <c>Covers</c> also runs when a bill reserves ingredients, so the postfix is transpiled to
+/// require the pawn to hold the reservation. The <c>freeze</c> setting is host-authoritative and
+/// carried in a per-game snapshot.
 /// </remarks>
 [MpCompatFor("firework.supplyshelf")]
 internal sealed class SupplyShelf
@@ -432,10 +425,8 @@ internal sealed class SupplyShelf
 			{
 				return __exception;
 			}
-			// The author's window writes the field and applies it locally before returning. Put the
-			// old snapshot back so the change only lands through the command, and re-apply it here
-			// (once, on the frame of the toggle) to keep the defs and the field consistent until
-			// the command runs.
+			// The window has already written the field locally, so restore the old value and let the
+			// command apply it; re-applying keeps the defs consistent until it runs.
 			bool selected = (bool)freezeField.GetValue(SettingsObject);
 			if (selected != __state.Before.Freeze)
 			{
