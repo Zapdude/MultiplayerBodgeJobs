@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Reflection;
 using HarmonyLib;
 using Multiplayer.API;
@@ -31,6 +32,9 @@ internal class VanillaGravshipExpanded
 	private static FieldInfo factionDataField;
 
 	private static FieldInfo areaManagerField;
+
+	private static readonly AccessTools.FieldRef<WorldComponent_GravshipController, Gravship> landingGravship =
+		AccessTools.FieldRefAccess<WorldComponent_GravshipController, Gravship>("gravship");
 
 	public VanillaGravshipExpanded(ModContentPack mod)
 	{
@@ -102,6 +106,95 @@ internal class VanillaGravshipExpanded
 		factionDataField = AccessTools.Field(AccessTools.TypeByName("Multiplayer.Client.MultiplayerMapComp"), "factionData");
 		areaManagerField = AccessTools.Field(AccessTools.TypeByName("Multiplayer.Client.FactionMapData"), "areaManager");
 		MpCompat.harmony.Patch(AccessTools.Method(AccessTools.TypeByName("Multiplayer.Client.MapSetup"), "InitNewFactionData"), null, new HarmonyMethod(typeof(VanillaGravshipExpanded), "PostMapSetupInitNewFactionData"));
+		RegisterLandingLaunchInfoSync();
+	}
+
+	private static void RegisterLandingLaunchInfoSync()
+	{
+		Type landingPatch = AccessTools.TypeByName("VanillaGravshipExpanded.WorldComponent_GravshipController_LandingEnded_Patch");
+		if (landingPatch == null)
+		{
+			Log.Error("[MPCompat] VGE landing info: LandingEnded patch type not found; extended launch info will not sync and the landing may diverge.");
+			return;
+		}
+
+		try
+		{
+			MP.RegisterSyncMethod(typeof(VanillaGravshipExpanded), nameof(SyncExtendedLaunchInfo)).ExposeParameter(1);
+		}
+		catch (Exception e)
+		{
+			Log.Error($"[MPCompat] VGE landing info: failed to register SyncExtendedLaunchInfo. The landing will diverge.\n{e}");
+			return;
+		}
+
+		MpCompat.harmony.Patch(
+			AccessTools.Method(typeof(GravshipLandingMarker), "BeginLanding"),
+			new HarmonyMethod(typeof(VanillaGravshipExpanded), nameof(BeforeBeginLanding)) { priority = 800 });
+
+		MethodInfo postfix = AccessTools.DeclaredMethod(landingPatch, "Postfix");
+		if (postfix == null)
+		{
+			Log.Error("[MPCompat] VGE landing info: LandingEnded Postfix not found; the missing-info guard is not installed.");
+			return;
+		}
+
+		MpCompat.harmony.Patch(postfix,
+			new HarmonyMethod(typeof(VanillaGravshipExpanded), nameof(BeforeLandingPostfix)));
+		Log.Message("[MPCompat] VGE landing info sync installed.");
+	}
+
+	private static bool BeforeBeginLanding(GravshipLandingMarker __instance)
+	{
+		if (!MP.IsInMultiplayer || !MP.InInterface)
+			return true;
+
+		WorldComponent_GravshipController controller = Find.GravshipController;
+		Gravship gravship = controller == null ? null : landingGravship(controller);
+		Building_GravEngine engine = gravship?.Engine;
+		LaunchInfo launchInfo = engine?.launchInfo;
+		ExtendedLaunchInfo info = launchInfo?.ExtendedInfo(createIfMissing: false);
+		if (info == null)
+		{
+			Log.Error($"[MPCompat] VGE landing info: no ExtendedLaunchInfo for {gravship?.Label ?? "unknown gravship"} at marker {__instance?.Tile}; clients will run the landing postfix without it.");
+			return true;
+		}
+
+		SyncExtendedLaunchInfo(engine, info);
+		return true;
+	}
+
+	public static void SyncExtendedLaunchInfo(Building_GravEngine engine, ExtendedLaunchInfo info)
+	{
+		if (engine == null || info == null)
+		{
+			Log.Error($"[MPCompat] VGE landing info: invalid payload engine={engine}, info={info}; the landing will diverge.");
+			return;
+		}
+
+		LaunchInfo launchInfo = engine.launchInfo;
+		if (launchInfo == null)
+		{
+			Log.Error($"[MPCompat] VGE landing info: {engine} has no LaunchInfo; the extended info was not applied.");
+			return;
+		}
+
+		LaunchInfo_ExposeData_Patch.extendedLaunchInfos[launchInfo] = info;
+		Log.Message($"[MPCompat] VGE landing info applied for {engine} (source tile {info.launchSourceTile}).");
+	}
+
+	private static bool BeforeLandingPostfix((Gravship gravship, Dictionary<LandingOutcomeDef, float> outcomes) __0)
+	{
+		LaunchInfo launchInfo = __0.gravship?.Engine?.launchInfo;
+		ExtendedLaunchInfo info = launchInfo?.ExtendedInfo(createIfMissing: false);
+		if (info == null)
+		{
+			Log.Error("[MPCompat] VGE landing postfix skipped: no extended launch info reached this client. " +
+			          "The landing would NRE in TryTriggerLaunchBoon and diverge; fix the landing info sync.");
+			return false;
+		}
+
+		return true;
 	}
 
 	private static bool PreSetSelectedVacCheckpoints(float resistance, bool allowDrafted)

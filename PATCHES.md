@@ -121,6 +121,31 @@ and falls back to `BaseContent.BadGraphic` for an empty collection. It is a stop
 should not reach a live map at all (see section 3). Keep this in its own commit so it can be
 reverted without touching the landing-preview fix.
 
+## 5. VGE landing launch-info sync (1.6)
+
+| | |
+| --- | --- |
+| Files | `Source_Referenced/Multiplayer.Compat/VanillaGravshipExpanded.cs`, `Referenced/Multiplayer_Compat_Referenced.dll` |
+| Upstream | fork-only |
+| Status | implemented, needs a two-client landing test |
+
+The VGE landing postfix reads `ExtendedLaunchInfo` (launch source tile, forced boon/mishap,
+gravtech researcher, VGE2 components). On the client it can be null, which NREs in
+`TryTriggerLaunchBoon` and changes gravdata/maintenance results. The module syncs the whole
+`ExtendedLaunchInfo` (an `IExposable`) when the landing is confirmed, before the landing command,
+and applies it to the engine's `LaunchInfo` on every client. This is option 1: sync the data rather
+than skipping the work.
+
+It fails loudly: a missing engine/LaunchInfo/info, a failed registration, or a client that still has
+no info logs an `Error`; the landing postfix is skipped on that client instead of NREing. The sync is
+installed from `GravshipLandingMarker.BeginLanding` at priority 800, so it is sent before
+Multiplayer's own landing command.
+
+**Test plan.** Host and client, VGE/VGE2 landing. Confirm `Player.log` has
+`[MPCompat] VGE landing info sync installed.` at startup, no `[VGE] Exception in LandingEnded
+Postfix`, and identical gravdata/maintenance/boon results. If the sync fails, the error names the
+missing piece and the postfix is skipped.
+
 ## Fork plumbing, not for upstream
 
 - `About/About.xml` uses the fork's own package id, `zap.multiplayerbodgejobs`, so the original
