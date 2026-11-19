@@ -15,20 +15,9 @@ namespace Multiplayer.Compat
 {
     /// <summary>Character Development (Wants and Quirks) by ferny</summary>
     /// <remarks>
-    /// Every want, quirk, point and reward action in the mod is a direct local mutation: a button
-    /// in the pawn's wants tab or in the characters menu edits the pawn's data, and the same code
-    /// runs only on the client that pressed it. The actions are rerouted here through synced
-    /// methods, each taking a stable description of the target (a want key or a reward node key)
-    /// plus a seed, so every client applies exactly the same change.
-    ///
-    /// The redirects only fire in a multiplayer interface. During the simulation the mod's own
-    /// code keeps running, because anything that happens there already happens on every client,
-    /// and inside a synced command the redirects stay out of the way.
-    ///
-    /// The reward bubbles are part of the save (their position is scribed) and their physics runs
-    /// from each client's frame time, so the physics tick is disabled in multiplayer and the drag
-    /// position is restored after drawing. Claims go through a small replacement dialog that
-    /// validates and then queues the claim instead of mutating points, quirks and bubbles locally.
+    /// Every want, quirk, point and reward action mutates the pawn locally, so each is rerouted
+    /// through a synced method taking a stable key plus a seed. Redirects only fire in the
+    /// interface. Bubble positions are scribed and their physics is frame-based, so it is frozen.
     /// </remarks>
     [MpCompatFor("ferny.characterdevelopment")]
     class CharacterDevelopment
