@@ -106,6 +106,10 @@ map; the Graphic_Random guard covers their preview render.
 id]` lines for the crew or live station contents, and no `Exception printing VGE2_*` spam. Both
 clients must see the same crew and corpses.
 
+**Merge-ignore for 1.7.** Commit `7f18e3a`. This global-ID scope is 1.6-only: the 1.7 branch
+suppresses `CaptureGravshipCoroutine` through `VanillaGravshipPreview`, and its VGE2 build generates
+the crew outside that coroutine. Do not fold this commit into 1.7. See `MERGE_IGNORE.md`.
+
 ## 4. Graphic_Random negative index guard
 
 | | |
