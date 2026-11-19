@@ -1,4 +1,4 @@
-# Patch tracking 窶・`main` branch (RimWorld 1.6)
+# Patch tracking — `main` branch (RimWorld 1.6)
 
 Changes this fork carries on top of [rwmt/Multiplayer-Compatibility](https://github.com/rwmt/Multiplayer-Compatibility)
 for RimWorld 1.6, and what it takes to send each one upstream. This file covers the `main` branch
@@ -105,6 +105,21 @@ map; the Graphic_Random guard covers their preview render.
 `Player.log` has the `[MPCompat] Forcing global thing IDs during VGE2 ...` lines, no `[MP negative
 id]` lines for the crew or live station contents, and no `Exception printing VGE2_*` spam. Both
 clients must see the same crew and corpses.
+
+## 4. Graphic_Random negative index guard
+
+| | |
+| --- | --- |
+| Files | `Source/GraphicRandomNegativeIndexGuard.cs` |
+| Upstream | not for upstream; defensive render guard |
+| Status | separate commit, can be reverted independently |
+
+`Graphic_Random.SubGraphicFor` computes `subGraphics[num % subGraphics.Length]` from
+`OverrideGraphicIndex ?? thingIDNumber`. A negative thing ID produces a negative index and an
+`IndexOutOfRangeException` every print (the VGE2 station-prop spam). The guard normalizes the index
+and falls back to `BaseContent.BadGraphic` for an empty collection. It is a stopgap: negative IDs
+should not reach a live map at all (see section 3). Keep this in its own commit so it can be
+reverted without touching the landing-preview fix.
 
 ## Fork plumbing, not for upstream
 
