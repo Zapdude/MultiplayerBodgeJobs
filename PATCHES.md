@@ -1,4 +1,4 @@
-# Patch tracking — `main` branch (RimWorld 1.6)
+# Patch tracking 窶・`main` branch (RimWorld 1.6)
 
 Changes this fork carries on top of [rwmt/Multiplayer-Compatibility](https://github.com/rwmt/Multiplayer-Compatibility)
 for RimWorld 1.6, and what it takes to send each one upstream. This file covers the `main` branch
@@ -13,7 +13,7 @@ for a pull request should have its files, the exact behaviour, and a test plan l
 | --- | --- |
 | Files | `Source/Mods/UnboundWeaponCustomization.cs` |
 | Upstream | new compat module, PR candidate |
-| Status | implemented, needs a two-client test |
+| Status | implemented, two-client test exposed and fixed a dialog-close race; re-test pending |
 
 Targets Persona Weapons Unbound (`shunter.personaweaponsunbound`) and Unique Weapons Unbound
 (`shunter.uniqueweaponsunbound`).
@@ -30,9 +30,19 @@ patches `SetSpec`, and routes the commit through a synced method registered with
 re-entering the prefix. Everything is reflection-based, so the compat assembly takes no compile-time
 dependency on the two Unbound assemblies.
 
+It also registers `Dialog_WeaponCustomization` with `DialogUtilities.RegisterDialogCloseSync`. The
+driver's waiting toil ends the job with `Incompletable` as soon as `spec` is null and the dialog is
+gone, and Confirm calls `SetSpec` then `Close()` in the same frame. Deferring only the spec left the
+confirming client with a closed dialog and a null spec for a tick: it ended the job, rolled the
+trash/pack-food job, consumed map RNG and handed out a new job ID while the other client kept
+waiting. Deferring the close into the same command stream keeps every client on the same toil, and
+makes Cancel/Escape/close-X deterministic too.
+
 **Test plan.** Host and one client, both mods installed. Host customizes a weapon; client opens the
 same weapon and sees the new name, colour, texture and traits. Repeat with the client pressing
-Confirm. Check `Player.log` for a missing `SetSpec` warning after a mod update.
+Confirm. The non-confirming client's dialog must close when the confirming client commits, and its
+job must continue past the workbench instead of ending. Repeat with Cancel and with Escape. Check
+`Player.log` for a missing `SetSpec` warning after a mod update.
 
 **PR notes.** The module is self-contained. A PR only needs the new file; it follows the
 `[MpCompatFor]` convention and needs no project changes.
@@ -70,6 +80,31 @@ and see it on the other).
 
 **PR notes.** One file, one constructor. The existing constructor-skip workaround in the old Bodge
 Jobs mod is removed, so this replaces it rather than stacking with it.
+
+## 3. VGE2 landing crew/contents global IDs (1.6)
+
+| | |
+| --- | --- |
+| Files | `Source/VanillaGravshipGlobalIds.cs`, `Source/Mods/GravshipLandingIdScope.cs` |
+| Upstream | fork-only; the 1.7 branch uses preview suppression instead |
+| Status | implemented, awaiting a two-client test |
+
+VGE2 generates the landing raid crew only inside `CaptureGravshipCoroutine` through
+`GeneratePawns`, then `DespawnPawns`, and `Impact` respawns the stored `pawnPositions` on the live
+map. The coroutine is interface work, so `UniqueIdsPatch` gives the crew local negative IDs, which
+they keep into the live map. Negative IDs break `Graphic_Random` (negative modulo), and any
+`thingIDNumber`-seeded RNG or `HashSet<Thing>` order later.
+
+The 1.7 branch suppresses the coroutine, but in the 1.6 VGE2 that would remove the crew entirely.
+The 1.6 module keeps the preview and forces **global** thing IDs during `GeneratePawns` (crew) and
+`Impact` (live station contents) through the new `UniqueIdsPatch.forceGlobalIds` flag in the
+Multiplayer fork. The temp-map station props remain on local IDs and are discarded with the temp
+map; the Graphic_Random guard covers their preview render.
+
+**Test plan.** Start the VGE2 gravship scenario, trigger the enemy gravship arrival, and confirm
+`Player.log` has the `[MPCompat] Forcing global thing IDs during VGE2 ...` lines, no `[MP negative
+id]` lines for the crew or live station contents, and no `Exception printing VGE2_*` spam. Both
+clients must see the same crew and corpses.
 
 ## Fork plumbing, not for upstream
 
