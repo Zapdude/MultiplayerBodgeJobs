@@ -37,6 +37,64 @@ Confirm. Check `Player.log` for a missing `SetSpec` warning after a mod update.
 **PR notes.** The module is self-contained. A PR only needs the new file; it follows the
 `[MpCompatFor]` convention and needs no project changes.
 
+## 2. Supply Shelf: freeze setting sync and the current reservation patch
+
+| | |
+| --- | --- |
+| Files | `Source/SupplyShelf.cs`, `Source/SupplyShelfSettingsComponent.cs` |
+| Upstream | fork fix on the reconstructed 1.7 module; PR candidate when upstream carries 1.7 |
+| Status | implemented, needs a two-client test |
+
+The module as it shipped in the temp 1.7 build predates the mod's settings window and the current
+`DoBillShelfIngredients_Patch`, so two things change here.
+
+**Freeze setting.** `freeze` changes def power use and each shelf's cached frozen state, so a
+client with a different value behaves differently. The settings window is patched so only the host
+can toggle it, the host's change travels through a host-only synced method, and the per-game
+snapshot registered with `SessionServices` carries the value to a client that joins later (a small
+game component, as in the other settings modules, keeps the snapshot in the save). The reference
+also tracks a session epoch and blocks the mod's own `Apply` while the window is open; here the
+window's finalizer restores the previous snapshot, and re-applies it once on the frame of the
+toggle, so the field only moves when the command runs. A session change between the window's first
+and last frame is not possible (both run inside one call), and the `Current.Game` check discards a
+stale edit, so the epoch would add nothing.
+
+**Reservation check.** The build installed today calls `CompDirectSupply.Covers` from
+`DoBillShelfIngredients_Patch.Postfix`, not from the older `CollectIngredientsToils_Patch` lambda
+the module used to patch, so the module failed to load against the current mod. The transpiler now
+replaces that one call with a check that also requires the bill pawn to be on the bench's map,
+allowed to take the ingredient, and holding the reservation, so the ingredients a bill queues are
+the same on every client.
+
+**Test plan.** Two clients, Supply Shelf installed. Link a bench and move the stack limit on the
+client; both clients must show the link and the same limit, also after a save and load. Queue a bill
+that pulls from the shelf and confirm both clients plan the same haul. In the mod settings a client
+must see the freeze checkbox disabled; the host toggles it and both clients' shelf power draw and
+frozen contents change. A client that joins after the toggle must start with the host's value.
+
+**PR notes.** The module plus one game component, reflection-only, so no compile-time reference to
+the mod.
+
+## 3. Squishy Melee: mirror the presentation flags during a synced block
+
+| | |
+| --- | --- |
+| Files | `Source/SquishyMelee.cs` |
+| Upstream | fork fix on the reconstructed 1.7 module; PR candidate when upstream carries 1.7 |
+| Status | implemented, needs a visual two-client test |
+
+The author sets `MeleeTrack.Caster` (the pawn whose block is being animated) and `MeleeTrack.Blocked`
+around its own damage path. Multiplayer applies the shield block from this module's `ApplyGuard`, so
+those thread-static fields were never set and the block animation and the `SM_Blocked` text were
+missing for the blocked pawn. Install now mirrors both fields, and the block path sets `Blocked` when
+the damage instigator is the tracked caster.
+
+**Test plan.** Two clients, SQUISHY Melee installed, shield block enabled. Let a pawn block a melee
+attack: both clients must show the block motion and the blocked text for that pawn, and the pawn
+must take the reduced damage on both.
+
+**PR notes.** Four lines in the install and four in the block path; no behaviour changes elsewhere.
+
 ## Carried with the 1.7 code, not a fork patch
 
 - The VCEF Odyssey guard in `Source/VanillaFishingExpanded.cs` arrives with the reconstructed 1.7

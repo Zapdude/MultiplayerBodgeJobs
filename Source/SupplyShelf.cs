@@ -6,14 +6,54 @@ using System.Reflection.Emit;
 using HarmonyLib;
 using Multiplayer.API;
 using RimWorld;
+using UnityEngine;
 using Verse;
 using Verse.AI;
 
 namespace Multiplayer.Compat;
 
+/// <summary>
+/// Supply Shelf by Firework. Two per-shelf edits happen only on the client that makes them:
+/// linking a bench to a <c>CompDirectSupply</c> and moving the shelf's stack limit. Both are
+/// rerouted through synced commands here, and a supply comp may no longer feed a bench that
+/// belongs to another faction.
+/// </summary>
+/// <remarks>
+/// The mod's own <c>CompDirectSupply.Covers</c> is also used while a bill reserves its
+/// ingredients. That call has to agree on every client, so the postfix of
+/// <c>DoBillShelfIngredients_Patch</c> is transpiled to require that the pawn is on the bench's
+/// map and actually holds the reservation.
+///
+/// The <c>freeze</c> mod setting changes def power use and per-shelf cached state, so it is
+/// host-authoritative: clients get a disabled checkbox, the host's change travels as a command,
+/// and a per-game snapshot carries the value for clients that join later.
+/// </remarks>
 [MpCompatFor("firework.supplyshelf")]
 internal sealed class SupplyShelf
 {
+	private sealed class Snapshot : IExposable
+	{
+		internal bool Freeze;
+
+		public void ExposeData()
+		{
+			Scribe_Values.Look(ref Freeze, "freeze", false, true);
+		}
+	}
+
+	private sealed class SettingsEdit
+	{
+		internal Snapshot Before;
+
+		internal Game Game;
+
+		internal bool Enabled;
+
+		internal Color ContentColor;
+	}
+
+	private const string SettingsKey = "firework.supplyshelf.settings";
+
 	private static Type shelfType;
 
 	private static Type supplyType;
@@ -29,6 +69,16 @@ internal sealed class SupplyShelf
 	private static MethodInfo covers;
 
 	private static Func<Thing, Thing, bool> coversIngredient;
+
+	private static FieldInfo settingsHolder;
+
+	private static FieldInfo freezeField;
+
+	private static Action applySettings;
+
+	internal static bool Installed { get; private set; }
+
+	private static object SettingsObject => settingsHolder.GetValue(null);
 
 	private static bool Intercept
 	{
@@ -50,31 +100,50 @@ internal sealed class SupplyShelf
 	private static void Install()
 	{
 		CommandAuthorityBridge.Install();
-		shelfType = AccessTools.TypeByName("SupplyShelf.Building_SupplyShelf");
-		supplyType = AccessTools.TypeByName("SupplyShelf.CompDirectSupply");
-		MethodInfo methodInfo = AccessTools.DeclaredMethod(supplyType, "Toggle", new Type[1] { typeof(LocalTargetInfo) });
-		MethodInfo methodInfo2 = AccessTools.PropertySetter(shelfType, "MaxStacks");
-		covers = AccessTools.DeclaredMethod(supplyType, "Covers", new Type[2]
+		shelfType = ModType("Building_SupplyShelf");
+		supplyType = ModType("CompDirectSupply");
+		Type modType = ModType("SupplyShelfMod");
+		Type billPatchType = ModType("DoBillShelfIngredients_Patch");
+
+		MethodInfo toggleMethod = Method(supplyType, "Toggle", typeof(LocalTargetInfo));
+		MethodInfo stackLimitSetter = PropertySetter(shelfType, "MaxStacks");
+		covers = Method(supplyType, "Covers", typeof(Thing), typeof(Thing));
+		toggle = HarmonyLib.MethodInvoker.GetHandler(toggleMethod);
+		setStackLimit = HarmonyLib.MethodInvoker.GetHandler(stackLimitSetter);
+		links = AccessTools.FieldRefAccess<object, List<Thing>>(Field(supplyType, "benches"));
+		pendingFilter = AccessTools.FieldRefAccess<object, ThingDef>(Field(shelfType, "pending"));
+		coversIngredient = covers.CreateDelegate<Func<Thing, Thing, bool>>();
+
+		settingsHolder = Field(modType, "Settings");
+		freezeField = Field(settingsHolder.FieldType, "freeze");
+		applySettings = (Action)Method(modType, "Apply", Type.EmptyTypes).CreateDelegate(typeof(Action));
+
+		MP.RegisterSyncMethod(typeof(SupplyShelf), nameof(ApplyLink)).SetVersion(36);
+		MP.RegisterSyncMethod(typeof(SupplyShelf), nameof(ApplyStackLimit)).SetVersion(36);
+		MP.RegisterSyncMethod(typeof(SupplyShelf), nameof(SyncFreeze)).SetHostOnly().SetVersion(37);
+
+		Patch(toggleMethod, prefix: nameof(QueueLink));
+		Patch(stackLimitSetter, prefix: nameof(QueueStackLimit));
+		Patch(Method(supplyType, "PostDrawExtraSelectionOverlays"), prefix: nameof(CopySelectionLinks), finalizer: nameof(RestoreSelectionLinks));
+		Patch(Method(shelfType, "CheckFilter"), prefix: nameof(SkipLocalFilterCheck));
+		Patch(Method(shelfType, "ExposeData"), postfix: nameof(ExposePendingFilter));
+		Patch(covers, postfix: nameof(CheckSupplyOwner));
+		Patch(Method(billPatchType, "Postfix", typeof(JobDriver_DoBill), typeof(bool)), transpiler: nameof(RevalidateDirectIngredients));
+		Patch(Method(modType, "DoSettingsWindowContents"), prefix: nameof(BeforeSettings), finalizer: nameof(AfterSettings));
+		foreach (MethodInfo mutator in AccessTools.GetDeclaredMethods(typeof(ThingFilter)).Where(IsFilterMutator))
 		{
-			typeof(Thing),
-			typeof(Thing)
-		});
-		toggle = HarmonyLib.MethodInvoker.GetHandler(methodInfo);
-		setStackLimit = HarmonyLib.MethodInvoker.GetHandler(methodInfo2);
-		links = AccessTools.FieldRefAccess<object, List<Thing>>(AccessTools.Field(supplyType, "benches"));
-		pendingFilter = AccessTools.FieldRefAccess<object, ThingDef>(AccessTools.Field(shelfType, "pending"));
-		MP.RegisterSyncMethod(typeof(SupplyShelf), "ApplyLink").SetVersion(36);
-		MP.RegisterSyncMethod(typeof(SupplyShelf), "ApplyStackLimit").SetVersion(36);
-		Patch(methodInfo, "QueueLink");
-		Patch(methodInfo2, "QueueStackLimit");
-		Patch(AccessTools.DeclaredMethod(supplyType, "PostDrawExtraSelectionOverlays"), "CopySelectionLinks", null, "RestoreSelectionLinks");
-		Patch(AccessTools.DeclaredMethod(shelfType, "CheckFilter"), "SkipLocalFilterCheck");
-		Patch(AccessTools.DeclaredMethod(shelfType, "ExposeData"), null, "ExposePendingFilter");
-		Patch(covers, null, "CheckSupplyOwner");
-		foreach (MethodInfo item in AccessTools.GetDeclaredMethods(typeof(ThingFilter)).Where((MethodInfo method) =>
+			Patch(mutator, prefix: nameof(CheckFilterCommand));
+		}
+
+		SessionServices.Install();
+		SessionServices.RegisterSettings(SettingsKey, typeof(Snapshot), CaptureSettings, () => new Snapshot(), value => ApplySettings((Snapshot)value), value => value is Snapshot, () => (ModSettings)SettingsObject, "mpSupplyShelfSettings");
+		Installed = true;
+	}
+
+	private static bool IsFilterMutator(MethodInfo method)
+	{
+		switch (method.Name)
 		{
-			switch (method.Name)
-			{
 			case "SetAllow":
 			case "SetAllowAll":
 			case "SetDisallowAll":
@@ -84,13 +153,27 @@ internal sealed class SupplyShelf
 				return true;
 			default:
 				return false;
-			}
-		}))
-		{
-			Patch(item, "CheckFilterCommand");
 		}
-		Patch(AccessTools.DeclaredMethod(AccessTools.Inner(AccessTools.TypeByName("SupplyShelf.CollectIngredientsToils_Patch"), "<>c__DisplayClass0_0"), "<Postfix>b__0"), null, null, null, "RevalidateDirectToil");
-		coversIngredient = covers.CreateDelegate<Func<Thing, Thing, bool>>();
+	}
+
+	private static Type ModType(string name)
+	{
+		return AccessTools.TypeByName("SupplyShelf." + name) ?? throw new TypeLoadException("Supply Shelf: missing type SupplyShelf." + name);
+	}
+
+	private static MethodInfo Method(Type type, string name, params Type[] arguments)
+	{
+		return AccessTools.DeclaredMethod(type, name, arguments) ?? throw new MissingMethodException(type?.FullName ?? "Supply Shelf", name);
+	}
+
+	private static MethodInfo PropertySetter(Type type, string name)
+	{
+		return AccessTools.PropertySetter(type, name) ?? throw new MissingMethodException(type?.FullName ?? "Supply Shelf", "set_" + name);
+	}
+
+	private static FieldInfo Field(Type type, string name)
+	{
+		return AccessTools.DeclaredField(type, name) ?? throw new MissingFieldException(type?.FullName ?? "Supply Shelf", name);
 	}
 
 	private static void Patch(MethodBase method, string prefix = null, string postfix = null, string finalizer = null, string transpiler = null)
@@ -117,7 +200,7 @@ internal sealed class SupplyShelf
 			Faction faction = shelf.Faction;
 			if (faction != null && faction.IsPlayer)
 			{
-				return CommandAuthorityBridge.CanActForFaction(shelf.Faction);
+				return CommandAuthorityBridge.CanActForFaction(faction);
 			}
 		}
 		return false;
@@ -129,13 +212,13 @@ internal sealed class SupplyShelf
 		{
 			return true;
 		}
-		ThingWithComps parent = __instance.parent;
-		if (CanEdit(parent, parent.Map))
+		Thing shelf = __instance.parent;
+		if (CanEdit(shelf, shelf.Map))
 		{
-			Thing thing = __0.Thing;
-			if (thing != null && thing.Spawned && thing.Map == parent.Map)
+			Thing bench = __0.Thing;
+			if (bench != null && bench.Spawned && bench.Map == shelf.Map)
 			{
-				ApplyLink(__instance, thing, parent.Map);
+				ApplyLink(__instance, bench, shelf.Map);
 			}
 		}
 		return false;
@@ -143,10 +226,23 @@ internal sealed class SupplyShelf
 
 	private static void ApplyLink(ThingComp supply, Thing bench, Map map)
 	{
-		if (supply != null && supplyType.IsInstanceOfType(supply) && CanEdit(supply.parent, map) && supply.parent.AllComps.Contains(supply) && bench is Building && bench.Spawned && bench is IBillGiver && !(bench is Building_WorkTableAutonomous) && bench.Map == map && bench.Faction == supply.parent.Faction && !(bool)PatchingUtilities.Get(supply.props, "autoLink"))
+		if (supply == null || !supplyType.IsInstanceOfType(supply) || !CanEdit(supply.parent, map) || !supply.parent.AllComps.Contains(supply))
 		{
-			toggle(supply, new LocalTargetInfo(bench));
+			return;
 		}
+		if (!(bench is Building) || !bench.Spawned || bench.Map != map || bench.Faction != supply.parent.Faction)
+		{
+			return;
+		}
+		if (!(bench is IBillGiver) || bench is Building_WorkTableAutonomous)
+		{
+			return;
+		}
+		if (PatchingUtilities.Get(supply.props, "autoLink") is bool autoLink && autoLink)
+		{
+			return;
+		}
+		toggle(supply, new LocalTargetInfo(bench));
 	}
 
 	private static bool QueueStackLimit(Building_Storage __instance, int __0)
@@ -176,10 +272,10 @@ internal sealed class SupplyShelf
 		if (MP.IsInMultiplayer)
 		{
 			ref List<Thing> reference = ref links(__instance);
-			List<Thing> list = SimplePool<List<Thing>>.Get();
-			list.AddRange(reference);
+			List<Thing> copy = SimplePool<List<Thing>>.Get();
+			copy.AddRange(reference);
 			__state = reference;
-			reference = list;
+			reference = copy;
 		}
 	}
 
@@ -188,10 +284,10 @@ internal sealed class SupplyShelf
 		if (__state != null)
 		{
 			ref List<Thing> reference = ref links(__instance);
-			List<Thing> list = reference;
+			List<Thing> copy = reference;
 			reference = __state;
-			list.Clear();
-			SimplePool<List<Thing>>.Return(list);
+			copy.Clear();
+			SimplePool<List<Thing>>.Return(copy);
 		}
 		return __exception;
 	}
@@ -211,49 +307,42 @@ internal sealed class SupplyShelf
 
 	private static bool CheckFilterCommand(ThingFilter __instance)
 	{
-		if (!MP.IsExecutingSyncCommand || !(__instance.settingsChangedCallback?.Target is StorageSettings storageSettings))
+		if (!MP.IsExecutingSyncCommand || __instance.settingsChangedCallback?.Target is not StorageSettings storageSettings)
 		{
 			return true;
 		}
-		if (storageSettings.owner is Building_Storage building_Storage && shelfType.IsInstanceOfType(building_Storage))
+		if (storageSettings.owner is Building_Storage shelf && shelfType.IsInstanceOfType(shelf))
 		{
-			return CanEdit(building_Storage, building_Storage.Map);
+			return CanEdit(shelf, shelf.Map);
 		}
-		IStoreSettingsParent owner = storageSettings.owner;
-		StorageGroup group = owner as StorageGroup;
-		if (group == null || !group.members.Any(shelfType.IsInstanceOfType))
+		if (storageSettings.owner is not StorageGroup group || !group.members.Any(shelfType.IsInstanceOfType))
 		{
 			return true;
 		}
-		return group.members.All((IStorageGroupMember member) => member is Thing shelf && CanEdit(shelf, group.Map));
+		return group.members.All(member => member is Thing thing && CanEdit(thing, group.Map));
 	}
 
 	private static void CheckSupplyOwner(Thing __0, Thing __1, ref bool __result)
 	{
-		if (!__result || !MP.IsInMultiplayer || !(__0.Position.GetSlotGroup(__0.Map)?.parent is Thing thing) || thing.Faction == __1.Faction)
+		if (!__result || !MP.IsInMultiplayer)
 		{
 			return;
 		}
-		Faction faction = thing.Faction;
-		if (faction == null || !faction.IsPlayer)
+		if (__0.Position.GetSlotGroup(__0.Map)?.parent is not Thing shelf || shelf.Faction == __1.Faction)
 		{
-			Faction faction2 = __1.Faction;
-			if (faction2 == null || !faction2.IsPlayer)
-			{
-				return;
-			}
+			return;
 		}
-		__result = false;
+		Faction shelfFaction = shelf.Faction;
+		Faction benchFaction = __1.Faction;
+		if ((shelfFaction != null && shelfFaction.IsPlayer) || (benchFaction != null && benchFaction.IsPlayer))
+		{
+			__result = false;
+		}
 	}
 
-	private static IEnumerable<CodeInstruction> RevalidateDirectToil(IEnumerable<CodeInstruction> instructions, MethodBase __originalMethod)
+	private static IEnumerable<CodeInstruction> RevalidateDirectIngredients(IEnumerable<CodeInstruction> instructions)
 	{
-		IList<LocalVariableInfo> localVariables = __originalMethod.GetMethodBody().LocalVariables;
-		if (localVariables.Count < 2 || localVariables[0].LocalType != typeof(Pawn) || localVariables[1].LocalType != typeof(Job))
-		{
-			throw new InvalidOperationException("Supply Shelf direct ingredient toil locals changed");
-		}
-		int replacements = 0;
+		int replaced = 0;
 		foreach (CodeInstruction instruction in instructions)
 		{
 			if (!instruction.Calls(covers))
@@ -261,18 +350,17 @@ internal sealed class SupplyShelf
 				yield return instruction;
 				continue;
 			}
-			replacements++;
-			yield return new CodeInstruction(OpCodes.Ldloc_0).WithLabels(instruction.labels).WithBlocks(instruction.blocks);
-			yield return new CodeInstruction(OpCodes.Ldloc_1);
-			yield return CodeInstruction.Call(typeof(SupplyShelf), "CanSupplyDirectly");
+			replaced++;
+			yield return new CodeInstruction(OpCodes.Ldarg_0).WithLabels(instruction.labels).WithBlocks(instruction.blocks);
+			yield return CodeInstruction.Call(typeof(SupplyShelf), nameof(CanSupplyDirectly));
 		}
-		if (replacements != 1)
+		if (replaced != 1)
 		{
-			throw new InvalidOperationException("Supply Shelf direct ingredient toil changed");
+			throw new InvalidOperationException($"Supply Shelf reserved ingredient check moved: Covers calls={replaced}");
 		}
 	}
 
-	private static bool CanSupplyDirectly(Thing ingredient, Thing bench, Pawn actor, Job job)
+	private static bool CanSupplyDirectly(Thing ingredient, Thing bench, JobDriver_DoBill driver)
 	{
 		if (!coversIngredient(ingredient, bench))
 		{
@@ -282,14 +370,98 @@ internal sealed class SupplyShelf
 		{
 			return true;
 		}
-		if (actor.Map == bench.Map)
+		Pawn pawn = driver.pawn;
+		Job job = driver.job;
+		if (pawn?.Map == null || pawn.Map != bench.Map)
 		{
-			Faction faction = bench.Faction;
-			if ((faction == null || !faction.IsPlayer || actor.Faction == bench.Faction) && ingredient.stackCount >= job.count && !ingredient.IsForbidden(actor) && actor.CanReserve(ingredient))
-			{
-				return actor.Map.reservationManager.ReservedBy(ingredient, actor, job);
-			}
+			return false;
 		}
-		return false;
+		Faction owner = bench.Faction;
+		if (owner != null && owner.IsPlayer && pawn.Faction != owner)
+		{
+			return false;
+		}
+		return !ingredient.IsForbidden(pawn) && pawn.CanReserve(ingredient) && pawn.Map.reservationManager.ReservedBy(ingredient, pawn, job);
+	}
+
+	private static IExposable CaptureSettings()
+	{
+		return new Snapshot
+		{
+			Freeze = (bool)freezeField.GetValue(SettingsObject)
+		};
+	}
+
+	private static void ApplySettings(Snapshot selected)
+	{
+		freezeField.SetValue(SettingsObject, selected.Freeze);
+		applySettings();
+	}
+
+	internal static IExposable SettingsState(Game game)
+	{
+		return SessionServices.SettingsForGame(SettingsKey, game);
+	}
+
+	private static void BeforeSettings(out SettingsEdit __state)
+	{
+		__state = null;
+		if (MP.IsInMultiplayer && Current.Game != null)
+		{
+			SessionServices.EnsureSettings(SettingsState(Current.Game));
+			__state = new SettingsEdit
+			{
+				Before = (Snapshot)CaptureSettings(),
+				Game = Current.Game,
+				Enabled = GUI.enabled,
+				ContentColor = GUI.contentColor
+			};
+			GUI.enabled &= MP.IsHosting;
+		}
+	}
+
+	private static Exception AfterSettings(Exception __exception, SettingsEdit __state)
+	{
+		if (__state == null)
+		{
+			return __exception;
+		}
+		try
+		{
+			if (!MP.IsInMultiplayer || Current.Game != __state.Game)
+			{
+				return __exception;
+			}
+			// The author's window writes the field and applies it locally before returning. Put the
+			// old snapshot back so the change only lands through the command, and re-apply it here
+			// (once, on the frame of the toggle) to keep the defs and the field consistent until
+			// the command runs.
+			bool selected = (bool)freezeField.GetValue(SettingsObject);
+			if (selected != __state.Before.Freeze)
+			{
+				ApplySettings(__state.Before);
+				if (__exception == null && MP.IsHosting && MP.InInterface)
+				{
+					SyncFreeze(selected);
+				}
+			}
+			return __exception;
+		}
+		finally
+		{
+			GUI.enabled = __state.Enabled;
+			GUI.contentColor = __state.ContentColor;
+		}
+	}
+
+	private static void SyncFreeze(bool selected)
+	{
+		if (MP.IsInMultiplayer && Current.Game != null)
+		{
+			SessionServices.ApplySettings(SettingsState(Current.Game), new Snapshot
+			{
+				Freeze = selected
+			});
+		}
 	}
 }

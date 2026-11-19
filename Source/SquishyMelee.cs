@@ -52,6 +52,10 @@ public sealed class SquishyMelee
 
 	private static FieldInfo shieldStrength;
 
+	private static FieldInfo visualCaster;
+
+	private static FieldInfo visualBlocked;
+
 	private static FieldInfo raceTunes;
 
 	private static FieldInfo raceName;
@@ -147,6 +151,11 @@ public sealed class SquishyMelee
 		shieldBlockMul = AuthorField("MeleeSettings", "shieldBlockMul");
 		shieldReflect = AuthorField("MeleeSettings", "shieldReflect");
 		shieldStrength = AuthorField("MeleeSettings", "shieldStrength");
+		// The author's presentation reads these thread-static flags to decide whether the next
+		// block was against the pawn it is animating; multiplayer applies the damage from our
+		// own path, so they have to be set here too.
+		visualCaster = AuthorField("MeleeTrack", "Caster");
+		visualBlocked = AuthorField("MeleeTrack", "Blocked");
 		raceTunes = AuthorField("MeleeSettings", "raceTunes");
 		raceName = AuthorField("MeleeRaceTune", "defName");
 		raceEnabled = AuthorField("MeleeRaceTune", "enabled");
@@ -468,6 +477,10 @@ public sealed class SquishyMelee
 					if (num2 <= 0.01f)
 					{
 						return true;
+					}
+					if (visualCaster.GetValue(null) == damage.Instigator)
+					{
+						visualBlocked.SetValue(null, true);
 					}
 					PlayBlock(pawn, guard.Opponent);
 					float num3 = combat.Reflect * num2;
