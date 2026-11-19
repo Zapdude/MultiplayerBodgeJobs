@@ -33,9 +33,6 @@ internal class VanillaGravshipExpanded
 
 	private static FieldInfo areaManagerField;
 
-	private static readonly AccessTools.FieldRef<WorldComponent_GravshipController, Gravship> landingGravship =
-		AccessTools.FieldRefAccess<WorldComponent_GravshipController, Gravship>("gravship");
-
 	public VanillaGravshipExpanded(ModContentPack mod)
 	{
 		LongEventHandler.ExecuteWhenFinished(LatePatch);
@@ -149,8 +146,7 @@ internal class VanillaGravshipExpanded
 		if (!MP.IsInMultiplayer || !MP.InInterface)
 			return true;
 
-		WorldComponent_GravshipController controller = Find.GravshipController;
-		Gravship gravship = controller == null ? null : landingGravship(controller);
+		Gravship gravship = __instance?.gravship;
 		Building_GravEngine engine = gravship?.Engine;
 		LaunchInfo launchInfo = engine?.launchInfo;
 		ExtendedLaunchInfo info = launchInfo?.ExtendedInfo(createIfMissing: false);
