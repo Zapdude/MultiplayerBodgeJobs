@@ -18,6 +18,14 @@ namespace Multiplayer.Compat
     /// SetSpec has one caller per mod, so patching it covers both the gizmo and the float-menu path.
     /// The spec is a plain IExposable with no SyncWorker, so the synced parameter is marked to
     /// travel by Scribe.
+    ///
+    /// The dialog itself must also close in sync. The driver's waiting toil ends the job with
+    /// Incompletable as soon as spec is null and the dialog is gone, and Confirm calls SetSpec then
+    /// Close in the same frame. While SetSpec is deferred to the synced command, a locally closed
+    /// dialog lets the confirming client bail out a tick early while every other client keeps
+    /// waiting - the job, the unique job id and the map random state then diverge. Registering the
+    /// dialog with DialogUtilities defers its close into the same command stream, so every client
+    /// keeps it open until the spec lands, and Cancel/Escape/Close also stay deterministic.
     /// </remarks>
     [MpCompatFor("shunter.personaweaponsunbound")]
     [MpCompatFor("shunter.uniqueweaponsunbound")]
@@ -43,6 +51,7 @@ namespace Multiplayer.Compat
                 persona = Install(packageId,
                     "PersonaWeaponsUnbound.JobDriver_CustomizeWeapon",
                     "PersonaWeaponsUnbound.CustomizationSpec",
+                    "PersonaWeaponsUnbound.Dialog_WeaponCustomization",
                     nameof(CommitPersonaSpec));
             }
             else if (packageId == "shunter.uniqueweaponsunbound")
@@ -50,11 +59,12 @@ namespace Multiplayer.Compat
                 unique = Install(packageId,
                     "UniqueWeaponsUnbound.JobDriver_CustomizeWeapon",
                     "UniqueWeaponsUnbound.CustomizationSpec",
+                    "UniqueWeaponsUnbound.Dialog_WeaponCustomization",
                     nameof(CommitUniqueSpec));
             }
         }
 
-        private static Target Install(string packageId, string driverName, string specName, string commitName)
+        private static Target Install(string packageId, string driverName, string specName, string dialogName, string commitName)
         {
             Type driverType = AccessTools.TypeByName(driverName);
             Type specType = AccessTools.TypeByName(specName);
@@ -71,6 +81,12 @@ namespace Multiplayer.Compat
                 Log.Warning($"[MPCompat] Unbound weapons: {driverName} changed; customization commits will not sync.");
                 return null;
             }
+
+            Type dialogType = AccessTools.TypeByName(dialogName);
+            if (dialogType == null)
+                Log.Warning($"[MPCompat] Unbound weapons: could not resolve {dialogName}; closing the customization dialog will not sync.");
+            else
+                DialogUtilities.RegisterDialogCloseSync(dialogType);
 
             MethodInfo commit = AccessTools.Method(typeof(UnboundWeaponCustomization), commitName)
                 .MakeGenericMethod(specType);

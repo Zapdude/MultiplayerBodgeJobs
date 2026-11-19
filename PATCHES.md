@@ -7,13 +7,20 @@ only; `main` keeps its own tracker for the 1.6 fork.
 Keep this file current when a patch is added, finished or sent upstream. A patch that is ready
 for a pull request should have its files, the exact behaviour, and a test plan listed here.
 
+## Folding from 1.6
+
+- Ignore 1.6 commit `7f18e3a` (the VGE2 global-ID scope). This branch suppresses the landing preview
+  through `VanillaGravshipPreview` and its VGE2 build generates the crew outside the preview; do not
+  carry the 1.6 scope. The Unbound dialog-close part of that commit is already on this branch
+  separately. See the 1.6 `MERGE_IGNORE.md`.
+
 ## 1. Unbound weapon customization sync
 
 | | |
 | --- | --- |
 | Files | `Source/UnboundWeaponCustomization.cs` |
 | Upstream | new compat module, PR candidate |
-| Status | implemented, needs a two-client test |
+| Status | implemented, two-client test exposed and fixed a dialog-close race; re-test pending |
 
 Targets Persona Weapons Unbound (`shunter.personaweaponsunbound`) and Unique Weapons Unbound
 (`shunter.uniqueweaponsunbound`).
@@ -30,9 +37,19 @@ patches `SetSpec`, and routes the commit through a synced method registered with
 re-entering the prefix. Everything is reflection-based, so the compat assembly takes no compile-time
 dependency on the two Unbound assemblies.
 
+It also registers `Dialog_WeaponCustomization` with `DialogUtilities.RegisterDialogCloseSync`. The
+driver's waiting toil ends the job with `Incompletable` as soon as `spec` is null and the dialog is
+gone, and Confirm calls `SetSpec` then `Close()` in the same frame. Deferring only the spec left the
+confirming client with a closed dialog and a null spec for a tick: it ended the job, rolled the
+trash/pack-food job, consumed map RNG and handed out a new job ID while the other client kept
+waiting. Deferring the close into the same command stream keeps every client on the same toil, and
+makes Cancel/Escape/close-X deterministic too.
+
 **Test plan.** Host and one client, both mods installed. Host customizes a weapon; client opens the
 same weapon and sees the new name, colour, texture and traits. Repeat with the client pressing
-Confirm. Check `Player.log` for a missing `SetSpec` warning after a mod update.
+Confirm. The non-confirming client's dialog must close when the confirming client commits, and its
+job must continue past the workbench instead of ending. Repeat with Cancel and with Escape. Check
+`Player.log` for a missing `SetSpec` warning after a mod update.
 
 **PR notes.** The module is self-contained. A PR only needs the new file; it follows the
 `[MpCompatFor]` convention and needs no project changes.
