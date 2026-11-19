@@ -26,8 +26,9 @@ every other client keeps the old spec and desyncs.
 **What the module does.** Resolves the driver type, the spec type and the `spec` field per mod,
 patches `SetSpec`, and routes the commit through a synced method registered with
 `SyncContext.QueueOrder_Down`. The spec is a plain `IExposable`, so the parameter is registered with
-`ExposeParameter(1)` and travels by Scribe. The synced method writes the field directly to avoid
-re-entering the prefix. Everything is reflection-based, so the compat assembly takes no compile-time
+`ExposeParameter(1)` and travels by Scribe. The synced method repeats the dialog's reservation and
+writes the field directly; the prefix only intercepts while the interface is open, so a command
+never re-enters it. Everything is reflection-based, so the compat assembly takes no compile-time
 dependency on the two Unbound assemblies.
 
 It also registers `Dialog_WeaponCustomization` with `DialogUtilities.RegisterDialogCloseSync`. The
@@ -38,10 +39,19 @@ trash/pack-food job, consumed map RNG and handed out a new job ID while the othe
 waiting. Deferring the close into the same command stream keeps every client on the same toil, and
 makes Cancel/Escape/close-X deterministic too.
 
+The dialog also reserves the ingredients and commits the job's haul plan before it calls `SetSpec`,
+and that work only happens on the confirming client. The module patches
+`HaulPlanning.IngredientReservation.TryReserveIngredientsForJob` so the dialog's own call is skipped
+in multiplayer, and the synced commit repeats it on every client before writing the spec. If the
+reservation fails there, the spec is not written and an error is logged. The skip is installed only
+when a default `ReservationResult` reports success, because skipping the original leaves the dialog
+checking the return value's default.
+
 **Test plan.** Host and one client, both mods installed. Host customizes a weapon; client opens the
 same weapon and sees the new name, colour, texture and traits. Repeat with the client pressing
 Confirm. The non-confirming client's dialog must close when the confirming client commits, and its
-job must continue past the workbench instead of ending. Repeat with Cancel and with Escape. Check
+job must continue past the workbench instead of ending. Both clients must end up with the same
+ingredient reservations and haul plan. Repeat with Cancel and with Escape. Check
 `Player.log` for a missing `SetSpec` warning after a mod update.
 
 **PR notes.** The module is self-contained. A PR only needs the new file; it follows the
