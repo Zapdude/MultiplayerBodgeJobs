@@ -150,6 +150,44 @@ Multiplayer's own landing command.
 Postfix`, and identical gravdata/maintenance/boon results. If the sync fails, the error names the
 missing piece and the postfix is skipped.
 
+## 6. Character Development wants, quirks and rewards (1.6)
+
+| | | |
+| --- | --- | --- |
+| Files | `Source/Mods/CharacterDevelopment.cs` |
+| Upstream | new compat module, PR candidate |
+| Status | implemented, needs a two-client test |
+
+Targets Character Development (`ferny.characterdevelopment`). Its wants tab, characters menu and
+reward dialog are local UI: a button edits the selected pawn's data, the reward dialog decrements
+points and adds a quirk, and the bubble physics runs from each client's frame time. Nothing there
+tells the other clients, so the pawns, points and saved bubble positions diverge.
+
+**What the module does.** Reflects the mod's types (`PawnWantsData`, `ActiveWant`, `RewardNode`,
+`Quirk`, `State`, `WantsAndQuirksUtility`, the tab and dialog) and redirects each player action to a
+synced method. Every synced method takes a stable key instead of a list index or object reference -
+wants are keyed by def, assigned tick, reroll count and target, reward nodes by def, item and pawn -
+plus a seed computed by the acting client, so the random parts run identically on every client. The
+redirects only fire in a multiplayer interface; ticks and running commands keep the mod's own code
+path. Covered actions: reroll, remove and reorder wants; remove and add quirks; complete a want; add
+character points; generate and validate reward bubbles; clean wants with a dead target; claim a
+reward. Claiming replaces the reward dialog with a small one that validates through the mod's own
+`CanBestowOn`/`CanHaveWants` and then queues the claim, and the bubble physics tick is disabled in
+multiplayer while the dragged position is restored after each frame, because `RewardNode.pos` is
+scribed.
+
+**Test plan.** Host and one client, both with the mod. On each client in turn: open a pawn's wants
+tab and reroll, remove and reorder a want; remove a quirk through the confirmation and add one from
+the characters menu; complete a want; open the characters menu and claim a bubble for a pawn. The
+other client must show the same wants, quirks, point totals and bubble in the same tick, with no
+`Exception` in `Player.log` and no "could not resolve" warning. Save and reload on both; the bubble
+positions must match.
+
+**PR notes.** One file, reflection-only, so it takes no compile-time dependency on the mod. The
+lambda callbacks it patches (want reorder and quirk removal) are located by name and signature under
+`ITab_Pawn_WantsAndQuirks`; a mod update that renames them logs a warning instead of breaking the
+load.
+
 ## Fork plumbing, not for upstream
 
 - `About/About.xml` uses the fork's own package id, `zap.multiplayerbodgejobs`, so the original
