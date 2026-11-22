@@ -10,6 +10,12 @@ on:
       - main
       - 1.7
 
+# Serialize rebuilds of the same branch. version.json names the release; bumping it
+# mints a new tag, and until then every push refreshes the same one.
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
   # 1.6 builds the base assembly from NuGet references and packages the committed assemblies.
   # The Referenced assembly needs third-party mod DLLs that must not be redistributed, so it is
@@ -20,8 +26,6 @@ jobs:
     runs-on: windows-latest
     env:
       GH_TOKEN: ${{ github.token }}
-      RELEASE_TAG: continuous-1.6
-      RELEASE_TITLE: Multiplayer Bodge Jobs 1.6 (Continuous)
       MOD_DIR: dist/MultiplayerBodgeJobs
       ASSET: MultiplayerBodgeJobs-1.6.zip
     steps:
@@ -30,6 +34,19 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
+
+      - name: Apply version
+        id: version
+        shell: powershell
+        run: |
+          $out = & powershell -NoProfile -ExecutionPolicy Bypass -File ./build/apply-version.ps1 --hash
+          if ($LASTEXITCODE -ne 0) { throw 'apply-version failed' }
+          $out
+          foreach ($line in $out) {
+            if ($line -match '^(version|releaseTag|prerelease)=') {
+              [System.IO.File]::AppendAllText($env:GITHUB_OUTPUT, "$line`n", [System.Text.UTF8Encoding]::new($false))
+            }
+          }
 
       - name: Build compat assembly
         run: dotnet build Source/Multiplayer_Compat.csproj -c Release
@@ -61,9 +78,15 @@ jobs:
 
       - name: Publish release
         shell: powershell
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.releaseTag }}
+          RELEASE_TITLE: Multiplayer Bodge Jobs ${{ steps.version.outputs.version }} (1.6)
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
         run: |
           $notes = @'
-          Rolling build of Multiplayer Bodge Jobs for RimWorld 1.6, from the head of `main`.
+          Multiplayer Bodge Jobs ${{ steps.version.outputs.version }} for RimWorld 1.6, from the head of `main`.
+
+          This release is rebuilt on every push to `main` until the version in `version.json` is bumped; the version number names the release line, and `About/About.xml` records the commit each build was made from.
 
           Requires Multiplayer Bodged (`zap.multiplayerbodged`). Do not enable the original Multiplayer Compatibility alongside this mod.
 
@@ -71,9 +94,13 @@ jobs:
           '@
           # Windows PowerShell turns a native command's stderr into an error record, and the
           # actions wrapper stops on those, so the existence check runs through cmd.
-          cmd /c "gh release delete --cleanup-tag --yes $env:RELEASE_TAG 2>nul"
-          gh release create $env:RELEASE_TAG --target ${{ github.sha }} --title $env:RELEASE_TITLE --notes $notes
+          cmd /c "gh release view $env:RELEASE_TAG >nul 2>nul"
+          if ($LASTEXITCODE -eq 0) { gh release delete --cleanup-tag --yes $env:RELEASE_TAG }
+          $ghArgs = @($env:RELEASE_TAG, '--target', '${{ github.sha }}', '--title', $env:RELEASE_TITLE, '--notes', $notes)
+          if ($env:PRERELEASE -eq 'true') { $ghArgs += '--prerelease' }
+          gh release create @ghArgs
           gh release upload $env:RELEASE_TAG $env:ASSET --clobber
+          if ($env:PRERELEASE -ne 'true') { gh release edit $env:RELEASE_TAG --latest }
 
   # 1.7 needs installed workshop mods and the game's UnityEngine.CoreModule.dll, which CI cannot
   # obtain without redistributing them or logging into Steam. It builds on a self-hosted runner
@@ -87,12 +114,23 @@ jobs:
     runs-on: [self-hosted, Windows, bodgejobs-1.7]
     env:
       GH_TOKEN: ${{ github.token }}
-      RELEASE_TAG: continuous-1.7
-      RELEASE_TITLE: Multiplayer Bodge Jobs 1.7 (Continuous)
       MOD_DIR: dist/MultiplayerBodgeJobs
       ASSET: MultiplayerBodgeJobs-1.7.zip
     steps:
       - uses: actions/checkout@v4
+
+      - name: Apply version
+        id: version
+        shell: powershell
+        run: |
+          $out = & powershell -NoProfile -ExecutionPolicy Bypass -File ./build/apply-version.ps1 --hash
+          if ($LASTEXITCODE -ne 0) { throw 'apply-version failed' }
+          $out
+          foreach ($line in $out) {
+            if ($line -match '^(version|releaseTag|prerelease)=') {
+              [System.IO.File]::AppendAllText($env:GITHUB_OUTPUT, "$line`n", [System.Text.UTF8Encoding]::new($false))
+            }
+          }
 
       - name: Build all assemblies
         run: |
@@ -127,9 +165,15 @@ jobs:
 
       - name: Publish release
         shell: powershell
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.releaseTag }}
+          RELEASE_TITLE: Multiplayer Bodge Jobs ${{ steps.version.outputs.version }} (1.7)
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
         run: |
           $notes = @'
-          Rolling build of Multiplayer Bodge Jobs for RimWorld 1.7, from the head of the `1.7` branch. Experimental: RimWorld 1.7 and the modules behind it are still moving.
+          Multiplayer Bodge Jobs ${{ steps.version.outputs.version }} for RimWorld 1.7, from the head of the `1.7` branch. Experimental: RimWorld 1.7 and the modules behind it are still moving.
+
+          This release is rebuilt on every dispatch until the version in `version.json` is bumped; the version number names the release line, and `About/About.xml` records the commit each build was made from.
 
           Requires Multiplayer Bodged (`zap.multiplayerbodged`). Do not enable the original Multiplayer Compatibility alongside this mod.
 
@@ -137,6 +181,10 @@ jobs:
           '@
           # Windows PowerShell turns a native command's stderr into an error record, and the
           # actions wrapper stops on those, so the existence check runs through cmd.
-          cmd /c "gh release delete --cleanup-tag --yes $env:RELEASE_TAG 2>nul"
-          gh release create $env:RELEASE_TAG --target ${{ github.sha }} --title $env:RELEASE_TITLE --notes $notes --prerelease
+          cmd /c "gh release view $env:RELEASE_TAG >nul 2>nul"
+          if ($LASTEXITCODE -eq 0) { gh release delete --cleanup-tag --yes $env:RELEASE_TAG }
+          $ghArgs = @($env:RELEASE_TAG, '--target', '${{ github.sha }}', '--title', $env:RELEASE_TITLE, '--notes', $notes)
+          if ($env:PRERELEASE -eq 'true') { $ghArgs += '--prerelease' }
+          gh release create @ghArgs
           gh release upload $env:RELEASE_TAG $env:ASSET --clobber
+          if ($env:PRERELEASE -ne 'true') { gh release edit $env:RELEASE_TAG --latest }
