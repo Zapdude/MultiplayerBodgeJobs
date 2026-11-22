@@ -891,6 +891,31 @@ namespace Multiplayer.Compat
         private static Type timestampFixerDelegateType;
         private static Type timestampFixerListType;
         private static AccessTools.FieldRef<IDictionary> timestampFieldsDictionaryField;
+        private static Action<Type, Action<object, int>> registerTimestampFields;
+
+        private delegate ref int TimestampFieldGetter(IExposable obj);
+
+        public static void RegisterTimestampFields(Type type, Action<object, int> convert)
+        {
+            if (type == null)
+                throw new ArgumentNullException(nameof(type));
+            if (convert == null)
+                throw new ArgumentNullException(nameof(convert));
+
+            if (registerTimestampFields == null)
+            {
+                var register = AccessTools.Method(
+                    "Multiplayer.Client.Patches.TimestampFixer:RegisterTimestampFields",
+                    new[] { typeof(Type), typeof(Action<object, int>) });
+                if (register == null)
+                    throw new MissingMethodException("Multiplayer.Client.Patches.TimestampFixer", "RegisterTimestampFields");
+
+                registerTimestampFields = (Action<Type, Action<object, int>>)register.CreateDelegate(
+                    typeof(Action<Type, Action<object, int>>));
+            }
+
+            registerTimestampFields(type, convert);
+        }
 
         public static void RegisterTimestampFixer(Type type, MethodInfo timestampFixerMethod)
         {
@@ -901,6 +926,25 @@ namespace Multiplayer.Compat
             }
 
             InitializeTimestampFixer();
+
+            if (registerTimestampFields != null)
+            {
+                try
+                {
+                    var getter = (TimestampFieldGetter)timestampFixerMethod.CreateDelegate(typeof(TimestampFieldGetter));
+                    registerTimestampFields(type, (obj, offset) =>
+                    {
+                        if (obj.GetType() == type)
+                            getter((IExposable)obj) += offset;
+                    });
+                    return;
+                }
+                catch (Exception e)
+                {
+                    Log.Error($"Trying to initialize timestamp fixer failed, exception caught:\n{e}");
+                    return;
+                }
+            }
 
             // Initialize call will display proper errors if needed
             if (timestampFixerDelegateType == null || timestampFixerListType == null || timestampFieldsDictionaryField == null)
@@ -939,6 +983,15 @@ namespace Multiplayer.Compat
                 if (type == null)
                 {
                     Log.Error("Trying to initialize timestamp fixer failed, could not find TimestampFixer type.");
+                    return;
+                }
+
+                var register = AccessTools.Method(type, "RegisterTimestampFields",
+                    new[] { typeof(Type), typeof(Action<object, int>) });
+                if (register != null)
+                {
+                    registerTimestampFields = (Action<Type, Action<object, int>>)register.CreateDelegate(
+                        typeof(Action<Type, Action<object, int>>));
                     return;
                 }
 
