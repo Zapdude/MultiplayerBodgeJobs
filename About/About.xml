@@ -4,7 +4,7 @@
   <name>Multiplayer Bodge Jobs</name>
   <author>Zapdude; based on Multiplayer Compatibility by the RimWorld Multiplayer Team</author>
   <url>https://github.com/Zapdude/MultiplayerBodgeJobs</url>
-  <modVersion>1.7.0</modVersion>
+  <modVersion>0.2.0-unstable</modVersion>
   <supportedVersions>
     <li>1.7</li>
   </supportedVersions>
