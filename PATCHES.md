@@ -159,13 +159,37 @@ module logs `MPCompat :: Exception loading vanillaexpanded.gravship` and does no
 Not ported, because this module does not use them: `GravshipFlightPreparation` and the ritual-dialog
 guards from the same build.
 
-## Not built: the Chapter 2 body module
+## Chapter 2 body module (VGE2)
 
-The temporary 1.7 build also ships `Referenced/Multiplayer_Gravship2Overrides.dll`. The loader
-requires it when `vanillaexpanded.gravship2` is loaded and throws `FileNotFoundException` otherwise,
-which aborts compat initialisation entirely. The file is 25 classes in
+| | |
+| --- | --- |
+| Files | `Source_Gravship2/Bodies/*` (25 bodies), `Source_Gravship2/Workshop17.replacements.txt`, `Referenced/Multiplayer_Gravship2Overrides.dll` |
+| Applied by | `Source/VanillaGravshipExpanded2Workshop.cs` from the embedded manifest |
+| Upstream | fork-only; the manifest replaces VGE2 method bodies, it is not an MPCompat module |
+| Status | implemented; build verified 2026-11-23; runtime **not_run** (no 1.7 install) |
+| Test scope | build only. The module compiles against the installed VGE2 1.7 assembly and the rebuilt DLL is byte-identical to the committed one; nothing has been observed in game. |
+
+`MpCompatLoader` requires `Referenced/Multiplayer_Gravship2Overrides.dll` when
+`vanillaexpanded.gravship2` is loaded and throws `FileNotFoundException` otherwise, which aborts
+compat initialisation entirely. The assembly carries 25 classes in
 `Multiplayer.Compat.Workshop17.Bodies`, each replacing one VGE2 method body with a deterministic
-version, applied by `Source/VanillaGravshipExpanded2Workshop.cs` from an embedded
-`Workshop17.replacements.txt` manifest. Building it needs a `Source_Referenced/Gravship2` project
-compiled against `VanillaGravshipExpanded2.dll` (installed, workshop `3799737423`) plus that manifest
-extracted from the shipped assembly. Until then, Chapter 2 players hit the missing-file throw.
+version; the replacements are applied from the embedded `Workshop17.replacements.txt`.
+
+### Provenance
+
+`Workshop17.inputs.txt` records the assemblies the bodies were extracted from:
+
+- `C2B3DD6F…4187BCE` — the private 1.7 build used for extraction.
+- `42F33C4A…B6CE0` — the installed 1.6 VGE2 assembly, which matches the workshop copy on 2026-11-23.
+
+The installed 1.7 VGE2 assembly on 2026-11-23 hashes to `8FA852F4…F5AD3F`, which is not in that
+list; the module compiles against it and the rebuilt DLL is byte-identical to the committed one. If
+VGE2 updates again, or the replacement count changes, re-extract the manifest and update this entry.
+
+### Build
+
+```
+dotnet build Source/Multiplayer_Compat.csproj -c Release
+dotnet build Source_Referenced/Multiplayer_Compat_Referenced.csproj -c Release
+dotnet build Source_Gravship2/Multiplayer_Gravship2Overrides.csproj -c Release
+```
