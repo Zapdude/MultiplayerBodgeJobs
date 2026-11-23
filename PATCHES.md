@@ -230,6 +230,39 @@ apply the same queue and current project. Repeat with the client driving. Check 
 for the old `World cmd exception (Sync)` and the `ApplyRestartQueue` `NullReferenceException`;
 neither should appear.
 
+## 8. Storyteller: Waves & Rewards: settings and slave market
+
+| | |
+| --- | --- |
+| Files | `Source/Mods/WavesRewardsShared.cs`, `WavesRewardsSettings.cs`, `WavesRewardsSlaveMarket.cs` |
+| Upstream | new compat modules, PR candidates |
+| Status | implemented; build verified 2026-11-23; runtime **not_run** (the mod was subscribed today, not enabled in a plan; no two-client test) |
+| Test scope | build only. Reflection checked against the installed 1.6 assembly; no in-game settings edit or slave order observed. |
+
+Targets `ruslan.wavesrewards` (`Ruslan.WavesRewards`, workshop `3841796795`). Do not confuse it with
+`patrickschwarzer.waves` (`#4khv`), a water/coast mod with the same short name.
+
+**Settings.** The simulation reads `WavesRewardsMod.Settings` continuously. In a multiplayer game the
+settings window and the "who comes" dialog edit a copy; on close the fields that changed are sent as
+one command and every PC applies and saves them. `modLanguage` and `verboseLog` stay per PC. 22
+fields are synced, including the float, int, bool, enum and `HashSet<string>` members.
+
+**Slave market.** The window generated its five offers per kind while drawing and paid/ordered from
+the interface on one PC. Now the simulation generates both offer lists when the window is created;
+"order" sends (window key, kind, count) as one command that prices, pays, places the order and
+discards the rest; closing without ordering is a command too. Window keys are tick plus order within
+the tick, so the same window has the same key on every client. Known limit from the reference: a
+player who joins while the market is open does not receive the offers.
+
+`InstallSafely` disables each module with one logged error if the mod surface moved. The `#fdpo`
+modules were read as a behaviour reference (MIT); these are reimplementations.
+
+**Test plan.** Two clients with the mod and this module. Change a setting (first wave day, growth,
+allowed threat kinds) on the host, close the settings window, confirm the client sees the same value
+and the simulation behaves the same. Open the slave market from the comms console on both; compare
+the five offers per kind; order from one, confirm both see the same silver, vouchers and delivered
+pawns; close without ordering on one and confirm the window closes on both.
+
 ## Fork plumbing, not for upstream
 
 - `About/About.xml` uses the fork's own package id, `zap.multiplayerbodgejobs`, so the original
