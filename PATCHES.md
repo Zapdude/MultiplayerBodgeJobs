@@ -122,6 +122,35 @@ must take the reduced damage on both.
 
 **PR notes.** Four lines in the install and four in the block path; no behaviour changes elsewhere.
 
+## 4. Character Development (Wants and Quirks)
+
+| | |
+| --- | --- |
+| Files | `Source/Mods/CharacterDevelopment.cs` |
+| Upstream | new compat module, PR candidate once upstream has a 1.7 line |
+| Status | implemented; build verified 2026-11-23; runtime **not_run** (no 1.7 game, and the workshop item has no 1.7 assembly on this machine) |
+| Test scope | build only. The module is a port of our own tested 1.6 implementation; its reflection surface is unchanged, but the 1.7 build of the target mod could not be inspected. |
+
+Targets `ferny.characterdevelopment`. Every want, quirk, point and reward action mutates the pawn
+locally, so each is rerouted through a synced method taking a stable key and a seed: reroll, remove,
+reorder, complete, character points, quirk removal/addition, reward bubbles, node validation,
+null-target cleanup and reward claim. Redirects only fire in the interface. Bubble positions are
+scribed while frame-based physics is frozen.
+
+The module is our own 1.6 implementation ported forward, not third-party code. `InstallSafely`
+catches a moved type or member and disables the module with one logged error, so a 1.7 surface
+change cannot abort the rest of compat initialisation.
+
+At 2026-11-23 the installed workshop copy has only `1.6/Assemblies/WantsAndQuirks.dll`; there is no
+`1.7` folder to verify the reflected names against. The port keeps the 1.6 surface and relies on the
+guard until a 1.7 build exists.
+
+**Test plan.** On a 1.7 install with both clients running Character Development: reroll and complete
+a want, add and remove a quirk, reorder two wants, gain character points, open and claim a reward
+from the replacement dialog, and check both clients agree on wants, quirks, points and the reward
+list. Check `Player.log` for `MPCompat :: Character Development` and the sync exception. Until a
+1.7 game exists, this is `not_run`.
+
 ## Carried with the 1.7 code, not a fork patch
 
 - The VCEF Odyssey guard in `Source/VanillaFishingExpanded.cs` arrives with the reconstructed 1.7
