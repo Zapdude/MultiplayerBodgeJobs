@@ -263,6 +263,35 @@ and the simulation behaves the same. Open the slave market from the comms consol
 the five offers per kind; order from one, confirm both see the same silver, vouchers and delivered
 pawns; close without ordering on one and confirm the window closes on both.
 
+## 9. VEF mercenary contracts (hiring / cancel)
+
+| | |
+| --- | --- |
+| Files | `Source/Mods/VefHiring.cs` |
+| Upstream | new compat module, PR candidate |
+| Status | implemented; install verified in an isolated 1.6 menu run 2026-11-23; the two-client contract test is **not_run** |
+| Test scope | module load and patch installation only. The filter, cancel lambda, ideology reset and save-check patches were all found and applied; no contract was hired or cancelled. |
+
+Targets Vanilla Expanded Framework (`oskarpotocki.vanillafactionsexpanded.core`). MPCompat's VEF
+module synced a piece of `Dialog_ContractInfo` by its position among the window's compiler-generated
+methods; after the VEF update that position is the pawn-list filter, so the window tried to sync a
+display-class delegate every frame, failed with "No writer for type
+VEF.Planet.Dialog_ContractInfo+<>c", and was not drawn. The filter now just filters. "Cancel
+contract" is one synced command that writes `HiringContractTracker.endTicks` and closes the window
+on every PC. `Dialog_Hire.hiredIdeo` is cleared at every load, and the developer-mode save check
+treats the `Hireable_` objects as saved because VEF rebuilds them before each load.
+
+The filter and the cancel lambda are located by name, signature and IL (the filter is the
+four-instruction `Pawn != null`; cancel is the lambda that stores to `endTicks`). A VEF change drops
+that part with a logged message instead of aborting compat.
+
+Behaviour reference: Multiplayer Fix (MIT); implementation is ours.
+
+**Test plan.** Two clients with VEF and a contract running. Open the contract window on a client
+that has not opened it; it must draw the pawn list. Cancel from either; the contract ends and the
+window closes on both. Hire from one and confirm the pawn, silver and duration on the other. Repeat
+with a refusal and an expired contract.
+
 ## Fork plumbing, not for upstream
 
 - `About/About.xml` uses the fork's own package id, `zap.multiplayerbodgejobs`, so the original
