@@ -292,6 +292,51 @@ that has not opened it; it must draw the pawn list. Cancel from either; the cont
 window closes on both. Hire from one and confirm the pawn, silver and duration on the other. Repeat
 with a refusal and an expired contract.
 
+## 10. Gore Perfected: simulation view checks and visual RNG
+
+| | |
+| --- | --- |
+| Files | `Source/Mods/GorePerfected.cs` |
+| Upstream | new compat module, PR candidate |
+| Status | implemented; build verified 2026-11-23; runtime **not_run** (mod installed, not in the active plan) |
+| Test scope | build only. The module scans the installed 1.6 assembly and patches the simulation view checks and four visual methods at load; no gore effect has been observed in game. |
+
+Targets `tiepi.goreperfected`. The mod gates oil drops, embers, splash clouds and drips on
+`Find.CurrentMap` and, in potato mode, `CameraDriver.CurrentViewRect`; several of those checks run
+inside the simulation, so one player's view decided whether the effect and its random numbers
+happened. The module transpiles every simulation method that reads those getters to answer with
+`Multiplayer.MapContext` (the map being simulated) and the whole map as the view rect; drawing,
+debug tools and the four purely visual effects are skipped. Those four (casings, debris, ricochets,
+footprints) keep their per-player look but run on a pushed random state that is popped afterwards,
+so they no longer consume the game's numbers. Single player is unchanged.
+
+The installed assembly has 41 methods that read the three getters; the module reports how many it
+transpiled and how many visual methods it isolated. Behaviour reference: Multiplayer Fix (MIT);
+implementation ours.
+
+**Test plan.** Two clients, one looking at a different map or a different part of the map. Trigger
+gore near a wall/water and a burning chunk: both clients must create the same oil/filth, embers and
+splash effects, and a desync trace comparison must show no new divergence.
+
+## 11. Integrated Implants: devourer early-release roll
+
+| | |
+| --- | --- |
+| Files | `Source/Mods/IntegratedImplants.cs` |
+| Upstream | new compat module, PR candidate |
+| Status | implemented; build verified 2026-11-23; runtime **not_run** (mod installed, not in the active plan) |
+| Test scope | build only. The installed 1.6 assembly has the expected postfix and exactly one `new System.Random()`; no devourer has been observed in game. |
+
+Targets `lts.i`. The Anomaly devourer's tick postfix is
+`new System.Random().Next(0, 1800) == 1799`, and an unseeded `Random` is clock-seeded, so every PC
+rolled independently and the devourer could release its prey on one PC and keep it on another. The
+transpiler replaces only that constructor: in multiplayer it becomes a generator seeded from the
+devourer's `thingIDNumber` and `TicksGame` (murmur3-mixed), so the roll is identical on every PC and
+the 1-in-1800 chance is unchanged. Single player keeps the mod's own generator.
+
+**Test plan.** Two clients, a devourer swallows a pawn and is left running for several in-game days;
+the early release must happen on the same tick on both, and the pawn's holder must match.
+
 ## Fork plumbing, not for upstream
 
 - `About/About.xml` uses the fork's own package id, `zap.multiplayerbodgejobs`, so the original
