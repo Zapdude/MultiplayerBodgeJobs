@@ -198,6 +198,38 @@ lambda callbacks it patches (want reorder and quirk removal) are located by name
 `ITab_Pawn_WantsAndQuirks`; a mod update that renames them logs a warning instead of breaking the
 load.
 
+## 7. Nice Research Tab: research queue edits from the tree UI
+
+| | |
+| --- | --- |
+| Files | `Source/Mods/NiceResearchTab.cs` |
+| Upstream | new compat module, PR candidate |
+| Status | implemented; build verified 2026-11-23; runtime **not_run** (the mod is installed but not enabled in the active plan; the two-client queue test is pending) |
+| Test scope | build only. The reflected surface matches the installed 1.6 assembly; no in-game queue edit has been observed with this module. |
+
+Targets `andromeda.niceresearchetab`. The mod syncs its queue commands, but every `Apply*` method
+solves through `ResearchTreeWidget.Instance`, which exists only on a client that has opened the
+research tab in this session. On the receiving client `ApplyRestartQueue` dereferences that null at
+its first instruction (`ldsfld ResearchTreeWidget::Instance`), the queues and the current project
+diverge, and the game desyncs.
+
+The module intercepts `AddToQueue`, `InsertToFront` and `RestartQueue` at `Priority.First`, solves
+the prerequisite chain from research defs on the client that clicked (the mod's tree solver when the
+tab exists, the def-only solver otherwise), and sends that list as one synced command. Every client
+applies it from game data only: `GetQueueFor`, `GravtechQueue`, `CachedFinalizedIndex`,
+`EnsureAllQueuesIsStarted`. `EnsureCurrentInQueue` and `EnsureGravtechInQueue` are skipped in the
+interface, and the `Apply*` refresh calls are made null-safe so a client without the tab cannot
+throw halfway through.
+
+`InstallSafely` disables the module with one logged error if the mod surface moved. The `#fdpo`
+module was read as a behaviour reference (MIT); this implementation is our own.
+
+**Test plan.** Two clients with Nice Research Tab and this module, the research tree opened on one
+client only. Host adds, inserts to front and restarts a project; the client without the tab must
+apply the same queue and current project. Repeat with the client driving. Check both `Player.log`s
+for the old `World cmd exception (Sync)` and the `ApplyRestartQueue` `NullReferenceException`;
+neither should appear.
+
 ## Fork plumbing, not for upstream
 
 - `About/About.xml` uses the fork's own package id, `zap.multiplayerbodgejobs`, so the original
