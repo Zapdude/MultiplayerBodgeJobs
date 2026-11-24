@@ -204,10 +204,10 @@ load.
 | --- | --- |
 | Files | `Source/Mods/NiceResearchTab.cs` |
 | Upstream | new compat module, PR candidate |
-| Status | implemented; build verified 2026-11-23; runtime **not_run** (the mod is installed but not enabled in the active plan; the two-client queue test is pending) |
+| Status | implemented; build verified 2026-11-23; the package-id gate fixed 2026-11-24 (it read `andromeda.niceresearchetab`, so the module could never install); runtime **not_run** (the mod is installed but not enabled in the active plan; the two-client queue test is pending) |
 | Test scope | build only. The reflected surface matches the installed 1.6 assembly; no in-game queue edit has been observed with this module. |
 
-Targets `andromeda.niceresearchetab`. The mod syncs its queue commands, but every `Apply*` method
+Targets `andromeda.niceresearchtab`. The mod syncs its queue commands, but every `Apply*` method
 solves through `ResearchTreeWidget.Instance`, which exists only on a client that has opened the
 research tab in this session. On the receiving client `ApplyRestartQueue` dereferences that null at
 its first instruction (`ldsfld ResearchTreeWidget::Instance`), the queues and the current project

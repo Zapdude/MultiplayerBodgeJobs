@@ -22,7 +22,7 @@ namespace Multiplayer.Compat
     /// data only. Behaviour reference: Multiplayer Fix (MIT); this is a reimplementation against the
     /// same mod API, not a copy.
     /// </remarks>
-    [MpCompatFor("andromeda.niceresearchetab")]
+    [MpCompatFor("andromeda.niceresearchtab")]
     class NiceResearchTab
     {
         private const int OpAdd = 0;
